@@ -239,7 +239,9 @@ body.rol-vendedor .sidebar-footer{display:none!important;}
 .prod-dropdown-item .pdi-info{font-size:11px;color:var(--muted);}
 .prod-dropdown-item .pdi-price{font-size:12px;font-weight:700;color:var(--green);white-space:nowrap;margin-left:8px;}
 .prod-dropdown-empty{padding:12px 14px;font-size:12px;color:var(--muted);text-align:center;}
-.confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:5000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;}
+.#confirm-overlay.open{opacity:1!important;pointer-events:all!important;}
+#toast-undo.show{opacity:1!important;transform:translateX(-50%) translateY(0)!important;pointer-events:all!important;}
+confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:5000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;}
 .confirm-overlay.open{opacity:1;pointer-events:all;}
 .confirm-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.4);transform:scale(.95);transition:transform .2s;}
 .confirm-overlay.open .confirm-box{transform:scale(1);}
