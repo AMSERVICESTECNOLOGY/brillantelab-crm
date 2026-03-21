@@ -2214,7 +2214,7 @@ const sections={
 var _crmListo = false; // se activa después del init completo
 function showSection(id){
   // Bloquear durante arranque para evitar que renders llamen showSection
-  if(!_crmListo && !_sesionActual) return;
+  if(!_crmListo) return;
   console.log('[showSection] id='+id);
   // Sincronizar nav bar móvil
   var navSecs = ['dashboard','ventas','cotizaciones','clientes','inventario'];
