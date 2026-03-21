@@ -2083,6 +2083,30 @@ const _sh = {
 };
 var _supaConectado = false;
 
+// ── Base de datos local (caché del localStorage) ──
+var db = (function(){
+  try {
+    var raw = localStorage.getItem('limpiezapro_v2');
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (!parsed.diluciones)   parsed.diluciones = [];
+      if (!parsed.ajustes)      parsed.ajustes = [];
+      if (!parsed.cotizaciones) parsed.cotizaciones = [];
+      if (!parsed.caja)         parsed.caja = [];
+      if (!parsed.recetas)      parsed.recetas = [];
+      if (!parsed.cajaConfig)   parsed.cajaConfig = {saldoInicial:0};
+      return parsed;
+    }
+  } catch(e) {}
+  return {
+    clientes:[], ventas:[], inventario:[], materiaprima:[],
+    produccion:[], costos:[], diluciones:[], ajustes:[],
+    cotizaciones:[], caja:[], recetas:[], cajaConfig:{saldoInicial:0}
+  };
+})();
+
+const save = () => localStorage.setItem('limpiezapro_v2', JSON.stringify(db));
+
 async function supaGet(tabla, params) {
   var url = SUPA_URL + '/rest/v1/' + tabla + '?select=*&limit=50000' + (params||'');
   var r = await fetch(url, {headers: _sh});
@@ -2156,7 +2180,6 @@ function actualizarIndicadorSupa(ok) {
 }
 
 const KEY='limpiezapro_v2';
-
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const fmt=n=>'$'+parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtDate=d=>{if(!d)return'—';return new Date(d+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});};
