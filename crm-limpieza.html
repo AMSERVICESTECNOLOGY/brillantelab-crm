@@ -3361,43 +3361,49 @@ function guardarVenta(){
 
 function _ejecutarVenta(v){
   var cliente = db.clientes.find(function(c){ return c.id===v.clienteId; });
-  var ventasCreadas = 0;
+  var _vIdActual = _sesionActual ? _sesionActual.id : null;
+
+  // Descontar stock de cada producto
   v.lineas.forEach(function(l){
-    var factor     = v.subtotal > 0 ? l.subtotal/v.subtotal : 1/v.lineas.length;
-    var totalLinea = parseFloat((l.subtotal - v.descMonto*factor).toFixed(2));
-    var producto   = db.inventario.find(function(i){ return i.id===l.productoId; });
-    var _vIdActual = _sesionActual ? _sesionActual.id : null;
-    var _notifAdmin = _sesionActual && _sesionActual.rol !== 'admin';
-    var esPedidoPendiente = v.estado === 'pendiente';
-    db.ventas.push({
-      id: uid(), clienteId: v.clienteId,
-      clienteNombre: cliente ? cliente.nombre : '',
-      productoId: l.productoId, productoNombre: l.productoNombre,
-      cantidad: l.cantidad, precio: l.precio,
-      total: totalLinea, estado: v.estado, canal: v.canal, notas: v.notas, fecha: v.fecha, vendedorId: _vIdActual,
-      stockAlMomentoDeVenta: producto ? (producto.stock||0) : 0
-    });
+    var producto = db.inventario.find(function(i){ return i.id===l.productoId; });
     if(producto){
-      // Permitir negativo intencionalmente
       producto.stock = parseFloat(((producto.stock||0) - l.cantidad).toFixed(4));
     }
-    ventasCreadas++;
   });
+
+  // UNA sola venta con todas las lineas
+  var nuevaVenta = {
+    id:            uid(),
+    clienteId:     v.clienteId,
+    clienteNombre: cliente ? cliente.nombre : '',
+    lineas:        v.lineas,
+    subtotal:      v.subtotal,
+    descuento:     v.desc || 0,
+    descMonto:     v.descMonto || 0,
+    total:         v.totalPedido,
+    estado:        v.estado,
+    canal:         v.canal,
+    notas:         v.notas,
+    fecha:         v.fecha,
+    vendedorId:    _vIdActual
+  };
+  db.ventas.push(nuevaVenta);
+
   if(cliente){
     cliente.totalCompras = (cliente.totalCompras||0) + v.totalPedido;
     cliente.ultimoPedido = v.fecha;
   }
   save();
-  // Sync a Supabase — ventas nuevas + cliente actualizado
-  var ventasNuevas = db.ventas.slice(-ventasCreadas);
+
+  // Sync Supabase
   (async function(){
-    var ok = await supaUpsert('ventas', ventasNuevas);
+    var ok = await supaUpsert('ventas', [nuevaVenta]);
     if(cliente) await supaUpsert('clientes', [cliente]);
     if(ok){
       if(v.estado === 'pendiente'){
         showToast('📦 Pedido enviado y sincronizado con la nube ☁️','green',4000);
       } else {
-        showToast('✅ '+ventasCreadas+' producto'+(ventasCreadas>1?'s':'')+' — '+fmt(v.totalPedido)+' ☁️','green',4000);
+        showToast('✅ Venta registrada — '+fmt(v.totalPedido)+' ☁️','green',4000);
       }
     } else {
       showToast('⚠️ Venta guardada localmente — sin conexión a la nube','red',4000);
@@ -3779,21 +3785,32 @@ function surtirPedido(ventaId){
   if(!venta){ showToast('❌ Venta no encontrada','red'); return; }
   if(venta.estado !== 'pendiente'){ showToast('ℹ️ Este pedido ya fue surtido',''); return; }
 
-  // Descontar stock
-  var producto = db.inventario.find(function(i){ return i.id===venta.productoId; });
-  if(producto){
-    producto.stock = parseFloat(((producto.stock||0) - (venta.cantidad||0)).toFixed(4));
+  // Descontar stock de cada linea
+  var productosActualizados = [];
+  var lineas = venta.lineas || [];
+  if(lineas.length > 0){
+    lineas.forEach(function(l){
+      var prod = db.inventario.find(function(i){ return i.id===l.productoId; });
+      if(prod){
+        prod.stock = parseFloat(((prod.stock||0) - (l.cantidad||0)).toFixed(4));
+        productosActualizados.push(prod);
+      }
+    });
+  } else {
+    // venta vieja sin lineas
+    var prod = db.inventario.find(function(i){ return i.id===venta.productoId; });
+    if(prod){
+      prod.stock = parseFloat(((prod.stock||0) - (venta.cantidad||0)).toFixed(4));
+      productosActualizados.push(prod);
+    }
   }
 
-  // Cambiar estado a pagado
   venta.estado = 'pagado';
-
   save();
 
-  // Sync Supabase
   if(_supaConectado){
     supaUpsert('ventas', [venta]);
-    if(producto) supaUpsert('inventario', [producto]);
+    if(productosActualizados.length) supaUpsert('inventario', productosActualizados);
   }
 
   refresh();
@@ -3805,27 +3822,103 @@ function renderVentas(){
   const tbody=document.getElementById('tbl-ventas');
   let list=[...getVentasVisibles()].sort((a,b)=>b.fecha.localeCompare(a.fecha));
   if(filtro)list=list.filter(v=>v.fecha.startsWith(filtro));
-  if(!list.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty"><div class="empty-icon">💰</div><div class="empty-text">Sin ventas</div></div></td></tr>';return;}
+  if(!list.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-icon">💰</div><div class="empty-text">Sin ventas</div></div></td></tr>';return;}
   const ec={pagado:'badge-green',credito:'badge-gold',anticipo:'badge-blue',pendiente:'badge-orange'};
   const el={pagado:'Pagado',credito:'A crédito',anticipo:'Anticipo',pendiente:'📦 Por surtir'};
-  tbody.innerHTML=list.map(v=>{
-    const canalLabel={menudeo:'🏪 Menudeo',mayorista:'📦 Mayorista',distribuidor:'🚚 Distribuidor'};
-    const canalCls={menudeo:'badge-red',mayorista:'badge-gold',distribuidor:'badge-blue'};
-    const c=v.canal||'';
-    const cBadge=c?'<span class="badge '+( canalCls[c]||'badge-gray')+'">'+( canalLabel[c]||c)+'</span>':'—';
-    
-    var usuariosV = (_sesionActual&&_sesionActual.rol==='admin') ? getUsuarios() : [];
+  const canalLabel={menudeo:'🏪 Menudeo',mayorista:'📦 Mayorista',distribuidor:'🚚 Distribuidor'};
+  const canalCls={menudeo:'badge-red',mayorista:'badge-gold',distribuidor:'badge-blue'};
+
+  tbody.innerHTML=list.map(function(v){
+    var c = v.canal||'';
+    var cBadge = c?'<span class="badge '+(canalCls[c]||'badge-gray')+'">'+(canalLabel[c]||c)+'</span>':'—';
+    var total = (v.total!=null&&v.total>0) ? v.total : 0;
+
+    // Resumen de productos
+    var lineas = v.lineas || [];
+    var productosResumen;
+    if(lineas.length > 0){
+      productosResumen = lineas.length === 1
+        ? (lineas[0].productoNombre||'—') + ' ×' + lineas[0].cantidad
+        : lineas.length + ' productos';
+    } else {
+      // venta vieja sin lineas
+      productosResumen = (v.productoNombre||(db.inventario.find(function(i){return i.id===v.productoId;})||{}).nombre||'—') + (v.cantidad?' ×'+v.cantidad:'');
+    }
+
+    // Vendedor (solo admin)
     var vendNom = '';
     if(_sesionActual&&_sesionActual.rol==='admin'&&v.vendedorId&&v.vendedorId!=='admin-default'){
-      var vUsr = usuariosV.find(function(u){ return u.id===v.vendedorId; });
-      vendNom = vUsr ? vUsr.nombre : '';
+      var vUsr = getUsuarios().find(function(u){ return u.id===v.vendedorId; });
+      vendNom = vUsr ? ('<div style="font-size:10px;color:var(--accent)">👤 '+vUsr.nombre+'</div>') : '';
     }
-    var vendCell = (_sesionActual&&_sesionActual.rol==='admin')
-      ? '<td style="display:none"><span style="font-size:11px;color:var(--accent)">'+(vendNom||'—')+'</span></td>'
-      : '';
-    return `<tr><td class="mono">${fmtDate(v.fecha)}</td><td style="font-weight:600">${v.clienteNombre||(db.clientes.find(function(c){return c.id===v.clienteId;})||{}).nombre||v.clienteId||"—"}</td><td>${v.productoNombre||(db.inventario.find(function(i){return i.id===v.productoId;})||{}).nombre||v.productoId||"—"}</td><td class="mono">${v.cantidad}</td><td class="mono">${fmt(v.precio)}</td><td class="mono" style="font-weight:700;color:var(--green)">${fmt((v.total!=null&&v.total>0)?v.total:(v.cantidad||0)*(v.precio||0))}</td><td>${cBadge}</td><td><span class="badge ${ec[v.estado]}">${el[v.estado]}</span></td>`+vendCell+`<td><div class="action-btns">${v.estado==='pendiente'?`<button class="icon-btn" onclick="surtirPedido('${v.id}')" title="Surtir pedido" style="background:rgba(249,115,22,.1);color:var(--orange);border-color:var(--orange)">📦 Surtir</button>`:''}
-${v.estado!=='pagado'&&v.estado!=='pendiente'?`<button class="icon-btn" onclick="marcarCobrado('${v.id}')" title="Cobrado">✅</button>`:''}<button class="icon-btn del" onclick="del('ventas','${v.id}')">🗑</button></div></td></tr>`;
+
+    return '<tr>'+
+      '<td class="mono">'+fmtDate(v.fecha)+'</td>'+
+      '<td style="font-weight:600">'+(v.clienteNombre||'—')+vendNom+'</td>'+
+      '<td style="font-size:12px;color:var(--muted)">'+productosResumen+'</td>'+
+      '<td class="mono" style="font-weight:700;color:var(--green)">'+fmt(total)+'</td>'+
+      '<td>'+cBadge+'</td>'+
+      '<td><span class="badge '+(ec[v.estado]||'badge-gray')+'">'+(el[v.estado]||v.estado||'—')+'</span></td>'+
+      '<td><div class="action-btns">'+
+        '<button class="icon-btn" onclick="verTicketVenta(&quot;'+v.id+'&quot;)" title="Ver detalle" style="color:var(--accent)">🧾</button>'+
+        (v.estado==='pendiente'?'<button class="icon-btn" onclick="surtirPedido(&quot;'+v.id+'&quot;)" title="Surtir" style="color:var(--orange);border-color:var(--orange)">📦</button>':'')+
+        (v.estado!=='pagado'&&v.estado!=='pendiente'?'<button class="icon-btn" onclick="marcarCobrado(&quot;'+v.id+'&quot;)" title="Cobrado">✅</button>':'')+
+        '<button class="icon-btn del" onclick="del(&quot;ventas&quot;,&quot;'+v.id+'&quot;)" title="Eliminar">🗑</button>'+
+      '</div></td>'+
+    '</tr>';
   }).join('');
+}
+
+// ── Ticket de venta ──
+function verTicketVenta(ventaId){
+  var v = db.ventas.find(function(x){ return x.id===ventaId; });
+  if(!v) return;
+  var lineas = v.lineas || [];
+  if(!lineas.length && v.productoId){
+    lineas = [{productoNombre: v.productoNombre||v.productoId, cantidad: v.cantidad||1, precio: v.precio||0, subtotal: v.total||0}];
+  }
+
+  var itemsHTML = lineas.map(function(l){
+    return '<tr style="border-bottom:1px solid #eee">'+
+      '<td style="padding:8px 4px;font-size:13px">'+( l.productoNombre||'—')+'</td>'+
+      '<td style="padding:8px 4px;text-align:center;font-size:13px">'+l.cantidad+'</td>'+
+      '<td style="padding:8px 4px;text-align:right;font-size:13px">'+fmt(l.precio||0)+'</td>'+
+      '<td style="padding:8px 4px;text-align:right;font-size:13px;font-weight:700">'+fmt(l.subtotal||(l.cantidad*(l.precio||0)))+'</td>'+
+    '</tr>';
+  }).join('');
+
+  var descRow = (v.descMonto>0)
+    ? '<tr><td colspan="3" style="padding:6px 4px;text-align:right;color:#888;font-size:12px">Descuento ('+v.descuento+'%)</td><td style="padding:6px 4px;text-align:right;color:#e53e3e;font-size:12px">-'+fmt(v.descMonto)+'</td></tr>'
+    : '';
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+    '<title>Ticket — '+fmtDate(v.fecha)+'</title>'+
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:20px;max-width:400px;margin:0 auto;}'+
+    'h2{font-size:18px;margin-bottom:4px;}'+
+    '.sub{font-size:12px;color:#888;margin-bottom:16px;}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:8px;}'+
+    'th{background:#1a2e8a;color:#fff;padding:8px 4px;font-size:11px;text-align:left;}'+
+    'th:nth-child(2),th:nth-child(3),th:nth-child(4){text-align:right;}'+
+    '.total{font-size:18px;font-weight:800;color:#1a2e8a;text-align:right;padding:8px 4px;}'+
+    '.footer{text-align:center;color:#aaa;font-size:11px;margin-top:20px;border-top:1px dashed #ddd;padding-top:12px;}'+
+    '@media print{.no-print{display:none}}'+
+    '</style></head><body>'+
+    '<div class="no-print" style="margin-bottom:16px;display:flex;gap:8px">'+
+      '<button onclick="window.print()" style="background:#1a2e8a;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-weight:700">🖨️ Imprimir</button>'+
+      '<button onclick="window.close()" style="background:#eee;border:none;border-radius:6px;padding:8px 16px;cursor:pointer">✕ Cerrar</button>'+
+    '</div>'+
+    '<h2>Brillantelab</h2>'+
+    '<div class="sub">'+fmtDate(v.fecha)+' · '+v.clienteNombre+'</div>'+
+    '<table><thead><tr><th>Producto</th><th style="text-align:center">Cant.</th><th style="text-align:right">Precio</th><th style="text-align:right">Total</th></tr></thead>'+
+    '<tbody>'+itemsHTML+descRow+
+    '<tr><td colspan="3" class="total">TOTAL</td><td class="total">'+fmt(v.total||0)+'</td></tr>'+
+    '</tbody></table>'+
+    '<div class="footer">¡Gracias por su compra!</div>'+
+    '</body></html>';
+
+  var win = window.open('','_blank','width=500,height=600');
+  if(win){ win.document.write(html); win.document.close(); }
+  else { showToast('⚠️ Permite popups para ver el ticket','red',3000); }
 }
 
 // ── Color y emoji por categoría MP ──
@@ -5639,21 +5732,27 @@ function convertirEnVenta(id){
   var nuevaVenta = {
     id:            ventaId,
     fecha:         ahora.slice(0,10),
-    fechaHora:     ahora,
     clienteId:     cot.clienteId    || '',
     clienteNombre: cot.clienteNombre|| '',
     canal:         cot.canal        || 'menudeo',
-    tipo:          cot.tipo         || 'Público general',
-    lineas:        lineas,
-    subtotal:      subtotalBruto,
-    descuento:     descuento,
+    lineas:        (cot.items||[]).map(function(item){
+      return {
+        productoId:     item.productoId || '',
+        productoNombre: item.nombre     || '',
+        cantidad:       item.cantidad   || 1,
+        precio:         item.precio     || 0,
+        subtotal:       item.subtotal   || 0
+      };
+    }),
+    subtotal:      cot.subtotal     || subtotalBruto,
+    descuento:     cot.descuento    || 0,
+    descMonto:     cot.descMonto    || 0,
     total:         totalFinal,
-    totalPedido:   totalFinal,
     notas:         'Generada desde cotización '+cot.folio,
     cotizacionId:  cot.id,
     cotizacionFolio: cot.folio,
     vendedorId:    _sesionActual ? _sesionActual.id : 'admin-default',
-    estado:        'completada'
+    estado:        'pagado'
   };
 
   db.ventas.push(nuevaVenta);
