@@ -2090,6 +2090,7 @@ const _sh = {
   'Content-Type': 'application/json'
 };
 var _supaConectado = false;
+var _seccionPorDefecto = 'dashboard';
 
 // ── Base de datos local (caché del localStorage) ──
 var db = (function(){
@@ -3525,58 +3526,32 @@ document.addEventListener('keydown', function(e){
 
 
 // ── Render ──
+var _refreshTimer = null;
 function refresh(){
-  // No renderizar si el usuario no ha iniciado sesión
   if(!_sesionActual) return;
-  var dl=document.getElementById('diag-log');
-  if(dl) dl.innerHTML += '<br>9. refresh() ejecutando renders...';
-  var renders = [
-    ['renderDashboard', renderDashboard],
-    ['renderVentas', renderVentas],
-    ['renderCobranza', renderCobranza]
-  ];
-  renders.forEach(function(pair){
-    try { pair[1](); } 
-    catch(e){ 
-      var dl=document.getElementById('diag-log');
-      if(dl) dl.innerHTML += '<br>❌ ERROR en '+pair[0]+': '+e.message;
-      console.error(pair[0], e);
-    }
-  });
-  setTimeout(function(){
-    var renders2 = [
-      ['renderClientes', renderClientes],
-      ['renderMP', renderMP],
-      ['renderProduccion', renderProduccion],
-      ['renderInventario', renderInventario],
-      ['renderCostos', renderCostos],
-      ['renderCotizaciones', renderCotizaciones],
-      ['renderGanancias', renderGanancias],
-      ['renderCaja', renderCaja],
-      ['renderRecetas', renderRecetas]
-    ];
-    renders2.forEach(function(pair){
-      try { pair[1](); }
-      catch(e){
-        var dl=document.getElementById('diag-log');
-        if(dl) dl.innerHTML += '<br>❌ ERROR en '+pair[0]+': '+e.message;
-        console.error(pair[0], e);
-      }
-    });
-    var dl=document.getElementById('diag-log');
-    if(dl){
-      var ls = document.getElementById('login-screen');
-      var sd = document.getElementById('s-dashboard');
-      var lsDisplay = ls ? window.getComputedStyle(ls).display : 'NO EXISTE';
-      var sdDisplay = sd ? window.getComputedStyle(sd).display : 'NO EXISTE';
-      var lsHidden  = ls ? ls.classList.contains('hidden') : 'N/A';
-      dl.innerHTML += '<br>✅ Renders completados';
-      dl.innerHTML += '<br>login-screen display='+lsDisplay+' hidden='+lsHidden;
-      dl.innerHTML += '<br>s-dashboard display='+sdDisplay;
-      dl.innerHTML += '<br>dash-semana existe='+(!!document.getElementById('dash-semana'));
-      dl.innerHTML += '<br>dash-semana valor='+( document.getElementById('dash-semana')?.textContent||'VACIO');
-    }
-  }, 0);
+  clearTimeout(_refreshTimer);
+  _refreshTimer = setTimeout(function(){
+    try{ renderDashboard(); }catch(e){ console.error('renderDashboard',e); }
+    try{ renderVentas(); }catch(e){ console.error('renderVentas',e); }
+    try{ renderCobranza(); }catch(e){ console.error('renderCobranza',e); }
+    setTimeout(function(){
+      try{ renderClientes(); }catch(e){ console.error('renderClientes',e); }
+      try{ renderMP(); }catch(e){ console.error('renderMP',e); }
+      try{ renderProduccion(); }catch(e){ console.error('renderProduccion',e); }
+      try{ renderInventario(); }catch(e){ console.error('renderInventario',e); }
+      try{ renderCostos(); }catch(e){ console.error('renderCostos',e); }
+      try{ renderCotizaciones(); }catch(e){ console.error('renderCotizaciones',e); }
+      try{ renderGanancias(); }catch(e){ console.error('renderGanancias',e); }
+      try{ renderCaja(); }catch(e){ console.error('renderCaja',e); }
+      try{ renderRecetas(); }catch(e){ console.error('renderRecetas',e); }
+      // Diagnóstico final
+      var ls=document.getElementById('login-screen');
+      var sd=document.getElementById('s-dashboard');
+      console.log('[CRM] Renders OK | login='+
+        (ls?window.getComputedStyle(ls).display:'?')+
+        ' dashboard='+(sd?window.getComputedStyle(sd).display:'?'));
+    }, 0);
+  }, 100);
 }
 
 function renderDashboard(){
@@ -5876,6 +5851,10 @@ function intentarLogin(){
   errEl.classList.remove('show');
   document.getElementById('login-screen').classList.add('hidden');
   aplicarRol(found);
+  // Mostrar sección inicial sin loop
+  document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
+  var secInicial = document.getElementById('s-' + _seccionPorDefecto);
+  if(secInicial) secInicial.classList.add('active');
   var dl=document.getElementById('diag-log');
   if(dl) dl.innerHTML += '<br>7. Login exitoso: '+found.nombre+' llamando refresh()...';
   refresh();
@@ -5938,10 +5917,12 @@ function aplicarRol(usr){
   document.body.classList.remove('rol-vendedor','rol-admin','rol-distribuidor');
   document.body.classList.add('rol-'+usr.rol);
 
+  // NO llamar showSection aquí — el arranque lo maneja
+  // Solo asegurar que el dashboard esté activo por defecto
   if(usr.rol==='vendedor' || usr.rol==='distribuidor'){
-    showSection('vendedor');
+    _seccionPorDefecto = 'vendedor';
   } else {
-    showSection('dashboard');
+    _seccionPorDefecto = 'dashboard';
   }
   actualizarLogoLogin();
 }
@@ -6390,6 +6371,10 @@ async function arrancarCRM() {
   // 4. Render — SIEMPRE al final con datos listos
   if (sesionOk) {
     diag('7. Llamando refresh()...');
+    // Mostrar sección correcta SIN llamar showSection (evita loop)
+    document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
+    var secEl = document.getElementById('s-' + _seccionPorDefecto);
+    if(secEl) secEl.classList.add('active');
     refresh();
     diag('8. refresh() completado');
   } else {
