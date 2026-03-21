@@ -2278,7 +2278,13 @@ function showSection(id){
     'usuarios':     function(){ renderUsuarios(); }
   };
   if(renderMap[id]){
-    try { renderMap[id](); } catch(e){ console.error('render '+id, e); }
+    try { 
+      renderMap[id](); 
+    } catch(e){ 
+      console.error('[showSection] ERROR en render '+id+':', e.message, e.stack);
+      var dl=document.getElementById('diag-log');
+      if(dl) dl.innerHTML += '<br>❌ ERROR render '+id+': '+e.message;
+    }
   }
 
   // Nav móvil
@@ -6416,24 +6422,30 @@ async function arrancarCRM() {
     // Ahora sí permitir showSection
     setTimeout(function(){
     _crmListo = true;
-    // Agregar listeners a nav-items DESPUÉS del init
-    document.querySelectorAll('.nav-item[data-sec]').forEach(function(el){
-      el.addEventListener('click', function(){
-        showSection(el.dataset.sec);
+    // Listener único en el nav padre (delegación de eventos)
+    var nav = document.querySelector('.nav');
+    if(nav && !nav._listenerAdded){
+      nav._listenerAdded = true;
+      nav.addEventListener('click', function(e){
+        var item = e.target.closest('.nav-item[data-sec]');
+        if(item) showSection(item.dataset.sec);
       });
-    });
+    }
   }, 500);
   } else {
     diag('6. Sin sesión - mostrando login');
     // En login también activar para cuando el usuario entre
     setTimeout(function(){
     _crmListo = true;
-    // Agregar listeners a nav-items DESPUÉS del init
-    document.querySelectorAll('.nav-item[data-sec]').forEach(function(el){
-      el.addEventListener('click', function(){
-        showSection(el.dataset.sec);
+    // Listener único en el nav padre (delegación de eventos)
+    var nav = document.querySelector('.nav');
+    if(nav && !nav._listenerAdded){
+      nav._listenerAdded = true;
+      nav.addEventListener('click', function(e){
+        var item = e.target.closest('.nav-item[data-sec]');
+        if(item) showSection(item.dataset.sec);
       });
-    });
+    }
   }, 500);
   }
   // Si no hay sesión activa, el usuario hará login
