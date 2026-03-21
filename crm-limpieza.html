@@ -827,6 +827,15 @@ confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0
   <div class="info-box" style="margin-bottom:16px">
     📦 Aquí solo aparecen <strong>productos terminados listos para vender</strong>. El stock sube automáticamente al completar una orden de producción, o puedes agregar stock inicial manualmente.
   </div>
+
+  <!-- Gestor de categorías -->
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-header" style="cursor:pointer" onclick="toggleGestorCats()">
+      <div class="panel-title">🗂 Categorías <span id="cats-resumen" style="font-size:11px;color:var(--muted);font-weight:400"></span></div>
+      <span id="cats-arrow" style="font-size:16px;color:var(--muted);transition:.2s">▼</span>
+    </div>
+    <div id="gestor-cats-body" style="display:none;border-top:1px solid var(--border)"></div>
+  </div>
   <div id="alerts-inv"></div>
   <div class="panel">
     <div class="panel-header" style="flex-wrap:wrap;gap:8px">
@@ -1415,7 +1424,8 @@ confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0
       <div class="form-row">
         <div class="form-group"><label>Nombre del Producto *</label><input id="inv-nombre" placeholder="Ej: Jabón líquido multiusos 1L"></div>
         <div class="form-group"><label>Categoría</label>
-          <select id="inv-cat"><option>Desengrasante</option><option>Jabón líquido</option><option>Desinfectante</option><option>Blanqueador</option><option>Lavatrastes</option><option>Aromatizante</option><option>Multiusos</option><option>Industrial</option><option>Otro</option></select>
+          <input id="inv-cat" list="inv-cat-list" placeholder="Ej: Desengrasante, Abarrotes..." autocomplete="off">
+          <datalist id="inv-cat-list"></datalist>
         </div>
       </div>
       <div class="form-row">
@@ -1449,7 +1459,10 @@ confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0
         <div id="margenes-preview" style="display:none;margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
       </div>
       <input type="hidden" id="inv-precio" value="0">
-      <div class="form-group"><label>Descripción</label><textarea id="inv-desc" placeholder="Presentación, uso, volumen..."></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Proveedor</label><input id="inv-proveedor" placeholder="Ej: Ginez, Proliver, Propio"></div>
+        <div class="form-group"><label>Descripción</label><input id="inv-desc" placeholder="Presentación, uso, volumen..."></div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-inv')">Cancelar</button>
@@ -2495,6 +2508,8 @@ document.addEventListener('DOMContentLoaded', function(){
   document.addEventListener('click', function(e){
     var el = e.target.closest('[data-toggle-alerta]');
     if(el) toggleAlertas(el.dataset.toggleAlerta);
+    var ec = e.target.closest('[data-toggle-cat]');
+    if(ec) toggleCategoria(ec.dataset.toggleCat);
   });
 
   var selDest = document.getElementById('dil-destino');
@@ -2672,7 +2687,8 @@ function guardarInv(){
   const precioBase  = pMenudeo || pMayorista || pDistrib || 0;
   const data = {
     nombre,
-    categoria:document.getElementById('inv-cat').value,
+    categoria:document.getElementById('inv-cat').value.trim()||'General',
+    proveedor:(document.getElementById('inv-proveedor')?.value||'').trim(),
     stock:parseFloat(document.getElementById('inv-stock').value)||0,
     minimo:parseFloat(document.getElementById('inv-minimo').value)||10,
     unidad:document.getElementById('inv-unidad').value,
@@ -2681,7 +2697,7 @@ function guardarInv(){
     precioMayorista: pMayorista,
     precioDistribuidor: pDistrib,
     costo:parseFloat(document.getElementById('inv-costo').value)||0,
-    desc:document.getElementById('inv-desc').value.trim()
+    desc:(document.getElementById('inv-desc')?.value||'').trim()
   };
   if(_editInvId){
     const idx=db.inventario.findIndex(i=>i.id===_editInvId);
@@ -2702,6 +2718,7 @@ function editarInv(id){
     document.querySelector('#modal-inv .modal-header h3').textContent='✏️ Editar Producto';
     document.getElementById('inv-nombre').value=p.nombre||'';
     document.getElementById('inv-cat').value=p.categoria||'';
+    var provEl=document.getElementById('inv-proveedor'); if(provEl) provEl.value=p.proveedor||'';
     document.getElementById('inv-stock').value=p.stock||0;
     document.getElementById('inv-minimo').value=p.minimo||10;
     document.getElementById('inv-unidad').value=p.unidad||'';
@@ -2709,7 +2726,8 @@ function editarInv(id){
     document.getElementById('inv-precio-mayorista').value=p.precioMayorista||0;
     document.getElementById('inv-precio-distribuidor').value=p.precioDistribuidor||0;
     document.getElementById('inv-costo').value=p.costo||0;
-    document.getElementById('inv-desc').value=p.desc||'';
+    var descEl=document.getElementById('inv-desc'); if(descEl) descEl.value=p.desc||'';
+    actualizarDatalistCat();
     calcMargenes();
   },80);
 }
@@ -4166,6 +4184,77 @@ function toggleAlertas(contenedorId){
   if(arrow) arrow.style.transform = cont._abierto ? 'rotate(0)' : 'rotate(-90deg)';
 }
 
+
+// ══════════════════ SISTEMA DE CATEGORÍAS DE INVENTARIO ══════════════════
+var CAT_KEY = 'brillante_cats_inv';
+
+function getCategorias(){
+  try {
+    var cats = JSON.parse(localStorage.getItem(CAT_KEY)||'[]');
+    // Agregar categorías que existan en inventario pero no en la lista
+    var catsInv = [...new Set(db.inventario.map(function(i){ return i.categoria||'General'; }))];
+    catsInv.forEach(function(c){
+      if(!cats.find(function(x){ return x.nombre===c; })){
+        cats.push({nombre:c, activa:true});
+      }
+    });
+    return cats;
+  } catch(e){ return []; }
+}
+
+function saveCategorias(cats){
+  localStorage.setItem(CAT_KEY, JSON.stringify(cats));
+}
+
+function toggleCategoria(nombre){
+  var cats = getCategorias();
+  var cat  = cats.find(function(c){ return c.nombre===nombre; });
+  if(!cat) return;
+  cat.activa = !cat.activa;
+  saveCategorias(cats);
+  renderInventario();
+  renderGestorCategorias();
+  showToast((cat.activa?'✅ Categoría habilitada: ':'🚫 Categoría inhabilitada: ')+nombre, cat.activa?'green':'', 3000);
+}
+
+function actualizarDatalistCat(){
+  var dl = document.getElementById('inv-cat-list');
+  if(!dl) return;
+  var cats = getCategorias();
+  dl.innerHTML = cats.map(function(c){
+    return '<option value="'+c.nombre+'">';
+  }).join('');
+}
+
+function renderGestorCategorias(){
+  var cont = document.getElementById('gestor-cats-body');
+  if(!cont) return;
+  var cats = getCategorias();
+  if(!cats.length){
+    cont.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px">Sin categorías todavía. Agrega productos para verlas aquí.</div>';
+    return;
+  }
+  cont.innerHTML = cats.map(function(c){
+    var count = db.inventario.filter(function(i){ return (i.categoria||'General')===c.nombre; }).length;
+    var countActivos = db.inventario.filter(function(i){ return (i.categoria||'General')===c.nombre && i.activo!==false; }).length;
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)">'+
+      '<div>'+
+        '<div style="font-weight:700;font-size:13px;color:'+(c.activa?'var(--text)':'var(--muted)')+'">'+
+          (c.activa?'':'<s>')+c.nombre+(c.activa?'':'</s>')+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+count+' productos ('+countActivos+' activos)</div>'+
+      '</div>'+
+      '<button data-toggle-cat="'+c.nombre+'" style="'+
+        'background:'+(c.activa?'rgba(255,59,92,.1)':'rgba(0,184,122,.1)')+';'+
+        'color:'+(c.activa?'var(--red)':'var(--green)')+';'+
+        'border:1px solid '+(c.activa?'rgba(255,59,92,.2)':'rgba(0,184,122,.2)')+';'+
+        'border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:700">'+
+        (c.activa?'🚫 Inhabilitar':'✅ Habilitar')+
+      '</button>'+
+    '</div>';
+  }).join('');
+}
+
 // ── Habilitar / Inhabilitar producto del inventario ──
 function toggleActivoInv(id){
   var prod = db.inventario.find(function(i){ return i.id===id; });
@@ -4203,10 +4292,19 @@ function renderInventario(){
   var buscar = (document.getElementById('inv-buscar')?.value||'').toLowerCase();
   var filtroCat = document.getElementById('inv-filtro-cat')?.value||'';
 
+  // Categorías activas
+  var catsData = getCategorias();
+  var catsActivas = catsData.filter(function(c){ return c.activa!==false; }).map(function(c){ return c.nombre; });
+
   var inventarioFiltrado = db.inventario.filter(function(i){
-    var estaActivo = i.activo !== false; // undefined = activo por defecto
-    if(_mostrarInactivos && estaActivo) return false;
-    if(!_mostrarInactivos && !estaActivo) return false;
+    var estaActivo = i.activo !== false;
+    var catActiva  = catsActivas.indexOf(i.categoria||'General') !== -1;
+    if(_mostrarInactivos){
+      if(estaActivo && catActiva) return false;
+    } else {
+      if(!estaActivo) return false;
+      if(!catActiva) return false;
+    }
     if(buscar && !i.nombre.toLowerCase().includes(buscar)) return false;
     if(filtroCat && i.categoria !== filtroCat) return false;
     return true;
@@ -4241,6 +4339,8 @@ function renderInventario(){
     alerts.innerHTML='';
   }
   if(!db.inventario.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">Agrega productos o completa una orden de producción</div></div></td></tr>';if(alerts)alerts.innerHTML='';return;}
+  actualizarResumenCats();
+  actualizarDatalistCat();
   tbody.innerHTML=inventarioFiltrado.map(function(i){
     const esNegativo = i.stock < 0;
     const pct=esNegativo?0:(i.minimo>0?Math.min(100,(i.stock/Math.max(i.minimo*3,1))*100):60);
