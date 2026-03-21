@@ -5752,7 +5752,7 @@ function convertirEnVenta(id){
     cotizacionId:  cot.id,
     cotizacionFolio: cot.folio,
     vendedorId:    _sesionActual ? _sesionActual.id : 'admin-default',
-    estado:        'pagado'
+    estado:        (cot.condpago && cot.condpago !== 'Contado') ? 'credito' : 'pagado'
   };
 
   db.ventas.push(nuevaVenta);
@@ -5804,7 +5804,7 @@ function renderCotizaciones(){
         (c.estado==='pendiente'||c.estado==='enviada' ? '<button class="icon-btn" onclick="cambiarEstadoCot(&quot;'+c.id+'&quot;,&quot;aceptada&quot;)" title="Marcar aceptada" style="color:var(--green)">✅</button>' : '')+
         (c.estado==='aceptada' ? '<button class="icon-btn" onclick="marcarEntregada(&quot;'+c.id+'&quot;)" title="Marcar entregada" style="color:#a78bfa">🚚</button>' : '')+
         (c.estado==='entregada' ? '<button class="icon-btn" onclick="convertirEnVenta(&quot;'+c.id+'&quot;)" title="Convertir en venta" style="color:var(--green);font-weight:700">💰</button>' : '')+
-        (c.estado!=='venta' ? '<button class="icon-btn del" onclick="del(&quot;cotizaciones&quot;,&quot;'+c.id+'&quot;)" title="Eliminar">🗑</button>' : '')+
+        '<button class="icon-btn del" onclick="del(&quot;cotizaciones&quot;,&quot;'+c.id+'&quot;)" title="Eliminar">🗑</button>'+
       '</div></td>'+
     '</tr>';
   }).join('');
