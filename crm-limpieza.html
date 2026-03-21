@@ -556,23 +556,23 @@ body.rol-vendedor .sidebar-footer{display:none!important;}
   <input type="file" id="brand-file-input" accept="image/*" style="display:none" onchange="onBrandFileChange(event)">
   <nav class="nav">
     <div class="nav-label admin-only">PRINCIPAL</div>
-    <div class="nav-item vendedor-only" data-sec="vendedor" onclick="showSection('vendedor')"><span class="ni">🏠</span>Mi Panel</div>
-    <div class="nav-item active" data-sec="dashboard" onclick="showSection('dashboard')"><span class="ni">📊</span>Dashboard</div>
+    <div class="nav-item vendedor-only" data-sec="vendedor"><span class="ni">🏠</span>Mi Panel</div>
+    <div class="nav-item active" data-sec="dashboard"><span class="ni">📊</span>Dashboard</div>
     <div class="nav-label">VENTAS & CLIENTES</div>
-    <div class="nav-item" data-sec="clientes" onclick="showSection('clientes')"><span class="ni">👥</span>Clientes</div>
-    <div class="nav-item" data-sec="ventas" onclick="showSection('ventas')"><span class="ni">💰</span>Ventas</div>
-    <div class="nav-item" data-sec="cobranza" onclick="showSection('cobranza')"><span class="ni">🔔</span>Cobranza</div>
+    <div class="nav-item" data-sec="clientes"><span class="ni">👥</span>Clientes</div>
+    <div class="nav-item" data-sec="ventas"><span class="ni">💰</span>Ventas</div>
+    <div class="nav-item" data-sec="cobranza"><span class="ni">🔔</span>Cobranza</div>
     <div class="nav-label admin-only">PRODUCCIÓN</div>
-    <div class="nav-item" data-sec="materiaprima" onclick="showSection('materiaprima')"><span class="ni">🧪</span>Materia Prima</div>
-    <div class="nav-item" data-sec="recetas" onclick="showSection('recetas')"><span class="ni">📋</span>Recetas / Fórmulas</div>
-    <div class="nav-item" data-sec="produccion" onclick="showSection('produccion')"><span class="ni">🏭</span>Órdenes Producción</div>
-    <div class="nav-item" data-sec="inventario" onclick="showSection('inventario')"><span class="ni">📦</span>Producto Terminado</div>
-    <div class="nav-item admin-only" data-sec="usuarios" onclick="showSection('usuarios')"><span class="ni">👤</span>Usuarios</div>
+    <div class="nav-item" data-sec="materiaprima"><span class="ni">🧪</span>Materia Prima</div>
+    <div class="nav-item" data-sec="recetas"><span class="ni">📋</span>Recetas / Fórmulas</div>
+    <div class="nav-item" data-sec="produccion"><span class="ni">🏭</span>Órdenes Producción</div>
+    <div class="nav-item" data-sec="inventario"><span class="ni">📦</span>Producto Terminado</div>
+    <div class="nav-item admin-only" data-sec="usuarios"><span class="ni">👤</span>Usuarios</div>
     <div class="nav-label admin-only">FINANZAS</div>
-    <div class="nav-item" data-sec="caja" onclick="showSection('caja')"><span class="ni">🏦</span>Caja / Tesorería</div>
-    <div class="nav-item" data-sec="ganancias" onclick="showSection('ganancias')"><span class="ni">💹</span>Ganancias</div>
-    <div class="nav-item" data-sec="cotizaciones" onclick="showSection('cotizaciones')"><span class="ni">📄</span>Cotizaciones</div>
-    <div class="nav-item" data-sec="costos" onclick="showSection('costos')"><span class="ni">📋</span>Gastos</div>
+    <div class="nav-item" data-sec="caja"><span class="ni">🏦</span>Caja / Tesorería</div>
+    <div class="nav-item" data-sec="ganancias"><span class="ni">💹</span>Ganancias</div>
+    <div class="nav-item" data-sec="cotizaciones"><span class="ni">📄</span>Cotizaciones</div>
+    <div class="nav-item" data-sec="costos"><span class="ni">📋</span>Gastos</div>
   </nav>
   <div class="backup-block admin-only">
     <div class="backup-title">RESPALDO DE DATOS</div>
@@ -6409,11 +6409,27 @@ async function arrancarCRM() {
     refresh();
     diag('8. refresh() completado');
     // Ahora sí permitir showSection
-    setTimeout(function(){ _crmListo = true; }, 500);
+    setTimeout(function(){
+    _crmListo = true;
+    // Agregar listeners a nav-items DESPUÉS del init
+    document.querySelectorAll('.nav-item[data-sec]').forEach(function(el){
+      el.addEventListener('click', function(){
+        showSection(el.dataset.sec);
+      });
+    });
+  }, 500);
   } else {
     diag('6. Sin sesión - mostrando login');
     // En login también activar para cuando el usuario entre
-    setTimeout(function(){ _crmListo = true; }, 500);
+    setTimeout(function(){
+    _crmListo = true;
+    // Agregar listeners a nav-items DESPUÉS del init
+    document.querySelectorAll('.nav-item[data-sec]').forEach(function(el){
+      el.addEventListener('click', function(){
+        showSection(el.dataset.sec);
+      });
+    });
+  }, 500);
   }
   // Si no hay sesión activa, el usuario hará login
   // y iniciarSesion() llamará refresh()
