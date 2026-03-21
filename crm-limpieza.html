@@ -644,6 +644,7 @@ body.rol-vendedor .sidebar-footer{display:none!important;}
     <div class="kpi blue"><div class="kpi-label">VENTAS MES</div><div class="kpi-val blue" id="d-ventas">$0</div><div class="kpi-sub" id="d-ventas-sub">0 órdenes</div></div>
     <div class="kpi green"><div class="kpi-label">CLIENTES ACTIVOS</div><div class="kpi-val green" id="d-clientes">0</div><div class="kpi-sub">registrados</div></div>
     <div class="kpi gold"><div class="kpi-label">POR COBRAR</div><div class="kpi-val gold" id="d-cobrar">$0</div><div class="kpi-sub" id="d-cobrar-sub">0 pendientes</div></div>
+    <div class="kpi orange" style="cursor:pointer" onclick="showSection('ventas')" title="Ver pedidos pendientes"><div class="kpi-label">PEDIDOS PENDIENTES</div><div class="kpi-val" style="color:var(--orange)" id="d-pedidos-pendientes">0</div><div class="kpi-sub">por surtir — clic para ver</div></div>
     <div class="kpi red"><div class="kpi-label">STOCK BAJO</div><div class="kpi-val red" id="d-bajos">0</div><div class="kpi-sub">alertas activas</div></div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -3306,8 +3307,13 @@ function guardarVenta(){
     return; // No registrar aún
   }
 
+  // Si es vendedor/distribuidor, el pedido queda pendiente de surtir
+  var estadoFinal = estado;
+  if(_sesionActual && _sesionActual.rol !== 'admin'){
+    estadoFinal = 'pendiente';
+  }
   // Sin problema de stock — registrar directo
-  _ejecutarVenta({ clienteId, fecha, estado, canal, notas, desc, lineas, subtotal, descMonto, totalPedido });
+  _ejecutarVenta({ clienteId, fecha, estado: estadoFinal, canal, notas, desc, lineas, subtotal, descMonto, totalPedido });
 }
 
 function _ejecutarVenta(v){
@@ -3319,6 +3325,7 @@ function _ejecutarVenta(v){
     var producto   = db.inventario.find(function(i){ return i.id===l.productoId; });
     var _vIdActual = _sesionActual ? _sesionActual.id : null;
     var _notifAdmin = _sesionActual && _sesionActual.rol !== 'admin';
+    var esPedidoPendiente = v.estado === 'pendiente';
     db.ventas.push({
       id: uid(), clienteId: v.clienteId,
       clienteNombre: cliente ? cliente.nombre : '',
@@ -3337,8 +3344,16 @@ function _ejecutarVenta(v){
     cliente.totalCompras = (cliente.totalCompras||0) + v.totalPedido;
     cliente.ultimoPedido = v.fecha;
   }
-  save(); refresh();
-  showToast('✅ '+ventasCreadas+' producto'+(ventasCreadas>1?'s':'')+' — Total: '+fmt(v.totalPedido),'green',4000);
+  save();
+  // Sync Supabase - ventas nuevas
+  supaUpsert('ventas', db.ventas.slice(-ventasCreadas));
+  supaUpsert('inventario', db.inventario);
+  refresh();
+  if(v.estado === 'pendiente'){
+    showToast('📦 Pedido enviado — El admin lo surtirá pronto','green',4000);
+  } else {
+    showToast('✅ '+ventasCreadas+' producto'+(ventasCreadas>1?'s':'')+' — Total: '+fmt(v.totalPedido),'green',4000);
+  }
 }
 
 // ── Sistema de resolución de stock ──
@@ -3709,7 +3724,8 @@ function renderVentas(){
     var vendCell = (_sesionActual&&_sesionActual.rol==='admin')
       ? '<td style="display:none"><span style="font-size:11px;color:var(--accent)">'+(vendNom||'—')+'</span></td>'
       : '';
-    return `<tr><td class="mono">${fmtDate(v.fecha)}</td><td style="font-weight:600">${v.clienteNombre}</td><td>${v.productoNombre}</td><td class="mono">${v.cantidad}</td><td class="mono">${fmt(v.precio)}</td><td class="mono" style="font-weight:700;color:var(--green)">${fmt((v.total!=null&&v.total>0)?v.total:(v.cantidad||0)*(v.precio||0))}</td><td>${cBadge}</td><td><span class="badge ${ec[v.estado]}">${el[v.estado]}</span></td>`+vendCell+`<td><div class="action-btns">${v.estado!=='pagado'?`<button class="icon-btn" onclick="marcarCobrado('${v.id}')" title="Cobrado">✅</button>`:''}<button class="icon-btn del" onclick="del('ventas','${v.id}')">🗑</button></div></td></tr>`;
+    return `<tr><td class="mono">${fmtDate(v.fecha)}</td><td style="font-weight:600">${v.clienteNombre}</td><td>${v.productoNombre}</td><td class="mono">${v.cantidad}</td><td class="mono">${fmt(v.precio)}</td><td class="mono" style="font-weight:700;color:var(--green)">${fmt((v.total!=null&&v.total>0)?v.total:(v.cantidad||0)*(v.precio||0))}</td><td>${cBadge}</td><td><span class="badge ${ec[v.estado]}">${el[v.estado]}</span></td>`+vendCell+`<td><div class="action-btns">${v.estado==='pendiente'?`<button class="icon-btn" onclick="surtirPedido('${v.id}')" title="Surtir pedido" style="background:rgba(249,115,22,.1);color:var(--orange);border-color:var(--orange)">📦 Surtir</button>`:''}
+${v.estado!=='pagado'&&v.estado!=='pendiente'?`<button class="icon-btn" onclick="marcarCobrado('${v.id}')" title="Cobrado">✅</button>`:''}<button class="icon-btn del" onclick="del('ventas','${v.id}')">🗑</button></div></td></tr>`;
   }).join('');
 }
 
