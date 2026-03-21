@@ -3345,9 +3345,22 @@ function _ejecutarVenta(v){
     cliente.ultimoPedido = v.fecha;
   }
   save();
-  // Sync Supabase - ventas nuevas
-  supaUpsert('ventas', db.ventas.slice(-ventasCreadas));
-  supaUpsert('inventario', db.inventario);
+  // Sync Supabase - solo las ventas nuevas
+  var ventasNuevas = db.ventas.slice(-ventasCreadas);
+  if(_supaConectado){
+    // Subir ventas en lote
+    var lote = ventasNuevas.map(function(o){
+      var d = Object.assign({}, o); var id = d.id; delete d.id;
+      return {id: id, datos: d};
+    });
+    fetch(SUPA_URL+'/rest/v1/ventas', {
+      method: 'POST',
+      headers: Object.assign({}, _sh, {'Prefer': 'resolution=merge-duplicates'}),
+      body: JSON.stringify(lote)
+    }).then(function(r){
+      if(!r.ok) r.text().then(function(t){ console.warn('[supa ventas]', t); });
+    }).catch(function(e){ console.warn('[supa ventas]', e.message); });
+  }
   refresh();
   if(v.estado === 'pendiente'){
     showToast('📦 Pedido enviado — El admin lo surtirá pronto','green',4000);
@@ -3724,7 +3737,7 @@ function renderVentas(){
     var vendCell = (_sesionActual&&_sesionActual.rol==='admin')
       ? '<td style="display:none"><span style="font-size:11px;color:var(--accent)">'+(vendNom||'—')+'</span></td>'
       : '';
-    return `<tr><td class="mono">${fmtDate(v.fecha)}</td><td style="font-weight:600">${v.clienteNombre}</td><td>${v.productoNombre}</td><td class="mono">${v.cantidad}</td><td class="mono">${fmt(v.precio)}</td><td class="mono" style="font-weight:700;color:var(--green)">${fmt((v.total!=null&&v.total>0)?v.total:(v.cantidad||0)*(v.precio||0))}</td><td>${cBadge}</td><td><span class="badge ${ec[v.estado]}">${el[v.estado]}</span></td>`+vendCell+`<td><div class="action-btns">${v.estado==='pendiente'?`<button class="icon-btn" onclick="surtirPedido('${v.id}')" title="Surtir pedido" style="background:rgba(249,115,22,.1);color:var(--orange);border-color:var(--orange)">📦 Surtir</button>`:''}
+    return `<tr><td class="mono">${fmtDate(v.fecha)}</td><td style="font-weight:600">${v.clienteNombre||(db.clientes.find(function(c){return c.id===v.clienteId;})||{}).nombre||v.clienteId||"—"}</td><td>${v.productoNombre||(db.inventario.find(function(i){return i.id===v.productoId;})||{}).nombre||v.productoId||"—"}</td><td class="mono">${v.cantidad}</td><td class="mono">${fmt(v.precio)}</td><td class="mono" style="font-weight:700;color:var(--green)">${fmt((v.total!=null&&v.total>0)?v.total:(v.cantidad||0)*(v.precio||0))}</td><td>${cBadge}</td><td><span class="badge ${ec[v.estado]}">${el[v.estado]}</span></td>`+vendCell+`<td><div class="action-btns">${v.estado==='pendiente'?`<button class="icon-btn" onclick="surtirPedido('${v.id}')" title="Surtir pedido" style="background:rgba(249,115,22,.1);color:var(--orange);border-color:var(--orange)">📦 Surtir</button>`:''}
 ${v.estado!=='pagado'&&v.estado!=='pendiente'?`<button class="icon-btn" onclick="marcarCobrado('${v.id}')" title="Cobrado">✅</button>`:''}<button class="icon-btn del" onclick="del('ventas','${v.id}')">🗑</button></div></td></tr>`;
   }).join('');
 }
@@ -3997,7 +4010,7 @@ function renderCobranza(){
     const cl=db.clientes.find(c=>c.id===v.clienteId);
     const lim=new Date(v.fecha+'T12:00:00');lim.setDate(lim.getDate()+(cl?.credito||0));
     const dias=Math.floor((now-lim)/86400000);
-    return`<tr><td style="font-weight:700">${v.clienteNombre}</td><td>${v.productoNombre} × ${v.cantidad}</td><td class="mono" style="color:var(--gold);font-weight:700">${fmt(v.total)}</td><td class="mono">${fmtDate(v.fecha)}</td><td>${dias>0?`<span class="badge badge-red">+${dias} días</span>`:`<span class="badge badge-green">Vigente</span>`}</td><td><span class="badge ${v.estado==='credito'?'badge-gold':'badge-blue'}">${v.estado==='credito'?'Crédito':'Anticipo'}</span></td><td><button class="icon-btn" onclick="marcarCobrado('${v.id}')">✅ Cobrado</button></td></tr>`;}).join('');
+    return`<tr><td style="font-weight:700">${v.clienteNombre||(db.clientes.find(function(c){return c.id===v.clienteId;})||{}).nombre||v.clienteId||"—"}</td><td>${v.productoNombre||(db.inventario.find(function(i){return i.id===v.productoId;})||{}).nombre||v.productoId||"—"} × ${v.cantidad}</td><td class="mono" style="color:var(--gold);font-weight:700">${fmt(v.total)}</td><td class="mono">${fmtDate(v.fecha)}</td><td>${dias>0?`<span class="badge badge-red">+${dias} días</span>`:`<span class="badge badge-green">Vigente</span>`}</td><td><span class="badge ${v.estado==='credito'?'badge-gold':'badge-blue'}">${v.estado==='credito'?'Crédito':'Anticipo'}</span></td><td><button class="icon-btn" onclick="marcarCobrado('${v.id}')">✅ Cobrado</button></td></tr>`;}).join('');
 }
 
 // ══════════════════ BACKUP ══════════════════
