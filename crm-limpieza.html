@@ -2172,7 +2172,7 @@ async function supaGet(tabla, params) {
 }
 
 async function supaUpsert(tabla, objetos) {
-  if (!_supaConectado || !objetos || !objetos.length) return;
+  if (!_supaConectado || !objetos || !objetos.length) return false;
   var lote = (Array.isArray(objetos) ? objetos : [objetos]).map(function(o) {
     var d = Object.assign({}, o);
     var id = d.id;
@@ -2180,12 +2180,20 @@ async function supaUpsert(tabla, objetos) {
     return {id: id, datos: d};
   });
   try {
-    await fetch(SUPA_URL + '/rest/v1/' + tabla, {
+    var r = await fetch(SUPA_URL + '/rest/v1/' + tabla, {
       method: 'POST',
       headers: Object.assign({}, _sh, {'Prefer': 'resolution=merge-duplicates'}),
       body: JSON.stringify(lote)
     });
-  } catch(e) { console.warn('[supa upsert]', tabla, e.message); }
+    if(!r.ok){ var t = await r.text(); console.warn('[supa upsert]', tabla, t); return false; }
+    return true;
+  } catch(e) { console.warn('[supa upsert]', tabla, e.message); return false; }
+}
+
+// Sincronizar tabla completa a Supabase
+async function syncTabla(tabla) {
+  if(!_supaConectado || !db[tabla] || !db[tabla].length) return;
+  return supaUpsert(tabla, db[tabla]);
 }
 
 async function supaDelete(tabla, id) {
@@ -2575,7 +2583,7 @@ function guardarCliente(){
   if(!nombre||!tel)return alert('Nombre y teléfono requeridos');
   var _cliOwner = _sesionActual ? _sesionActual.id : 'admin-default';
   db.clientes.push({id:uid(),nombre,contacto:document.getElementById('c-contacto').value.trim(),tel,wa:document.getElementById('c-wa').value.trim(),dir:document.getElementById('c-dir').value.trim(),tipo:document.getElementById('c-tipo').value,credito:parseInt(document.getElementById('c-credito').value),notas:document.getElementById('c-notas').value.trim(),fecha:today(),totalCompras:0,propietarioId:_cliOwner});
-  save();closeModal('modal-cliente');refresh();
+  save(); if(_supaConectado) supaUpsert('clientes', db.clientes); closeModal('modal-cliente');refresh();
 }
 
 var _editMPId = null;
@@ -2591,7 +2599,7 @@ function guardarMP(){
   } else {
     db.materiaprima.push(Object.assign({id:uid()}, data));
   }
-  save();closeModal('modal-mp');refresh();
+  save(); if(_supaConectado) supaUpsert('materiaprima', db.materiaprima); closeModal('modal-mp');refresh();
 }
 
 function editarMP(id){
@@ -2641,7 +2649,7 @@ function guardarInv(){
   } else {
     db.inventario.push(Object.assign({id:uid()}, data));
   }
-  save();closeModal('modal-inv');refresh();
+  save(); if(_supaConectado) supaUpsert('inventario', db.inventario); closeModal('modal-inv');refresh();
 }
 
 function editarInv(id){
@@ -2876,6 +2884,7 @@ function guardarReceta(){
 
     _editRecetaId = null;
     save();
+    if(_supaConectado) supaUpsert('recetas', db.recetas);
 
     var modal = document.getElementById('modal-receta');
     if(modal) modal.classList.remove('open');
@@ -3041,7 +3050,7 @@ function guardarProd(){
     notas:document.getElementById('prod-notas').value.trim(),
     fecha:document.getElementById('prod-fecha').value
   });
-  save();closeModal('modal-prod');
+  save(); if(_supaConectado){ supaUpsert('produccion', db.produccion); supaUpsert('materiaprima', db.materiaprima); supaUpsert('inventario', db.inventario); } closeModal('modal-prod');
   showToast('✅ Orden registrada — Costo/unidad: '+fmt(costoPorUnidad),'green',4000);
   refresh();
 }
@@ -3053,7 +3062,9 @@ function completarOrden(id){
   const prod=db.inventario.find(i=>i.id===p.invId);
   if(prod)prod.stock=(prod.stock||0)+p.cantidad;
   p.estado='Completada';
-  save();refresh();
+  save();
+  if(_supaConectado){ supaUpsert('produccion',[p]); supaUpsert('inventario',db.inventario); supaUpsert('materiaprima',db.materiaprima); }
+  refresh();
 }
 
 // ── Venta multi-producto ──
@@ -3345,28 +3356,22 @@ function _ejecutarVenta(v){
     cliente.ultimoPedido = v.fecha;
   }
   save();
-  // Sync Supabase - solo las ventas nuevas
+  // Sync a Supabase — ventas nuevas + cliente actualizado
   var ventasNuevas = db.ventas.slice(-ventasCreadas);
-  if(_supaConectado){
-    // Subir ventas en lote
-    var lote = ventasNuevas.map(function(o){
-      var d = Object.assign({}, o); var id = d.id; delete d.id;
-      return {id: id, datos: d};
-    });
-    fetch(SUPA_URL+'/rest/v1/ventas', {
-      method: 'POST',
-      headers: Object.assign({}, _sh, {'Prefer': 'resolution=merge-duplicates'}),
-      body: JSON.stringify(lote)
-    }).then(function(r){
-      if(!r.ok) r.text().then(function(t){ console.warn('[supa ventas]', t); });
-    }).catch(function(e){ console.warn('[supa ventas]', e.message); });
-  }
+  (async function(){
+    var ok = await supaUpsert('ventas', ventasNuevas);
+    if(cliente) await supaUpsert('clientes', [cliente]);
+    if(ok){
+      if(v.estado === 'pendiente'){
+        showToast('📦 Pedido enviado y sincronizado con la nube ☁️','green',4000);
+      } else {
+        showToast('✅ '+ventasCreadas+' producto'+(ventasCreadas>1?'s':'')+' — '+fmt(v.totalPedido)+' ☁️','green',4000);
+      }
+    } else {
+      showToast('⚠️ Venta guardada localmente — sin conexión a la nube','red',4000);
+    }
+  })();
   refresh();
-  if(v.estado === 'pendiente'){
-    showToast('📦 Pedido enviado — El admin lo surtirá pronto','green',4000);
-  } else {
-    showToast('✅ '+ventasCreadas+' producto'+(ventasCreadas>1?'s':'')+' — Total: '+fmt(v.totalPedido),'green',4000);
-  }
 }
 
 // ── Sistema de resolución de stock ──
@@ -3496,10 +3501,10 @@ function guardarGasto(){
   const monto=parseFloat(document.getElementById('g-monto').value)||0;
   if(!concepto||!monto)return alert('Concepto y monto requeridos');
   db.costos.push({id:uid(),concepto,categoria:document.getElementById('g-cat').value,monto,notas:document.getElementById('g-notas').value.trim(),fecha:document.getElementById('g-fecha').value});
-  save();closeModal('modal-gasto');refresh();
+  save(); if(_supaConectado) supaUpsert('costos', db.costos); closeModal('modal-gasto');refresh();
 }
 
-function marcarCobrado(id){const v=db.ventas.find(x=>x.id===id);if(v){v.estado='pagado';save();refresh();}}
+function marcarCobrado(id){const v=db.ventas.find(x=>x.id===id);if(v){v.estado='pagado';save();if(_supaConectado) supaUpsert('ventas',[v]);refresh();}}
 // ── Sistema de eliminación con confirmación y deshacer ──
 var _confirmPending = null;  // {arr, id}
 var _undoStack      = null;  // {arr, index, item, sideEffects}
@@ -4218,6 +4223,7 @@ function guardarDilucion(){
   });
 
   save();
+  if(_supaConectado){ supaUpsert('materiaprima',db.materiaprima); supaUpsert('diluciones',db.diluciones||[]); }
   closeModal('modal-dilucion');
   showToast('✅ Conversión aplicada — '+v2.toFixed(3)+' '+origen.unidad+' de '+c2+'% generados', 'green', 5000);
   refresh();
@@ -4423,6 +4429,11 @@ function guardarAjuste(){
     if(modal) modal.classList.remove('open');
 
     var labels = {compra:'Compra registrada', devolucion:'Devolución aplicada', merma:'Merma registrada', regalo:'Salida registrada', correccion:'Stock corregido', otro:'Ajuste aplicado'};
+    if(_supaConectado){
+      supaUpsert('ajustes', db.ajustes);
+      if(modulo==='mp') supaUpsert('materiaprima', db.materiaprima);
+      else supaUpsert('inventario', db.inventario);
+    }
     showToast('✅ ' + (labels[tipo]||'Ajuste aplicado') + ' — Stock: ' + item.stock + ' ' + (item.unidad||''), 'green', 4000);
 
     refresh();
@@ -4611,7 +4622,7 @@ function guardarMovimientoCaja(){
   };
   if(!db.caja) db.caja=[];
   db.caja.push(mov);
-  save(); closeModal('modal-caja'); refresh();
+  save(); if(_supaConectado) supaUpsert('caja', db.caja); closeModal('modal-caja'); refresh();
   showToast((mov.tipo==='entrada'?'⬆️ Entrada':'⬇️ Salida')+' registrada: '+fmt(monto), mov.tipo==='entrada'?'green':'red');
 }
 
@@ -5435,6 +5446,7 @@ function guardarCotizacion(estado){
 
     // ── PASO 9: Guardar y cerrar ──
     save();
+    if(_supaConectado) supaUpsert('cotizaciones', db.cotizaciones);
     document.getElementById('modal-cotizacion').classList.remove('open');
     refresh();
 
