@@ -5883,7 +5883,6 @@ var SES_KEY       = 'brillante_sesion';
 function getUsuarios(){
   try {
     var lista = JSON.parse(localStorage.getItem(USR_KEY)||'[]');
-    // Asegurar que siempre haya un admin por defecto
     if(!lista.find(function(u){ return u.rol==='admin'; })){
       lista.unshift({
         id:'admin-default', user:'admin', pass:'admin123',
@@ -5896,8 +5895,45 @@ function getUsuarios(){
   } catch(e){ return []; }
 }
 
+// Cargar usuarios desde Supabase y actualizar localStorage
+async function sincronizarUsuarios(){
+  if(!_supaConectado) return;
+  try{
+    var r = await fetch(SUPA_URL+'/rest/v1/usuarios?select=*&limit=200', {headers: _sh});
+    if(!r.ok) return;
+    var rows = await r.json();
+    if(!rows.length) return;
+    var lista = rows.map(function(row){
+      return Object.assign({id: row.id}, row.datos||{});
+    });
+    // Asegurar admin
+    if(!lista.find(function(u){ return u.rol==='admin'; })){
+      lista.unshift({
+        id:'admin-default', user:'admin', pass:'admin123',
+        nombre:'Administrador', rol:'admin',
+        meta:20000, comision:0, productos:[], activo:true
+      });
+    }
+    localStorage.setItem(USR_KEY, JSON.stringify(lista));
+    console.log('[CRM] Usuarios sincronizados desde Supabase:', lista.length);
+  } catch(e){ console.warn('[supa] sync usuarios:', e.message); }
+}
+
 function saveUsuarios(lista){
   localStorage.setItem(USR_KEY, JSON.stringify(lista));
+  // Sincronizar con Supabase
+  if(_supaConectado){
+    var lote = lista.map(function(u){
+      var d = Object.assign({}, u);
+      var id = d.id; delete d.id;
+      return {id: id, datos: d};
+    });
+    fetch(SUPA_URL+'/rest/v1/usuarios', {
+      method: 'POST',
+      headers: Object.assign({}, _sh, {'Prefer': 'resolution=merge-duplicates'}),
+      body: JSON.stringify(lote)
+    }).catch(function(e){ console.warn('[supa] usuarios:', e.message); });
+  }
 }
 
 // ── LOGIN ──
@@ -6407,6 +6443,7 @@ async function arrancarCRM() {
     if (test.ok) {
       actualizarIndicadorSupa(true);
       await cargarDesdeSupabase();
+      await sincronizarUsuarios();
     }
   } catch(e) {
     actualizarIndicadorSupa(false);
