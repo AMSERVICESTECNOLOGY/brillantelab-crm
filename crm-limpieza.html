@@ -2211,8 +2211,11 @@ const sections={
   costos:      {title:'Gastos Operativos',      btnLabel:'＋ Registrar gasto', btnCls:'btn-primary', modalId:'modal-gasto'}
 };
 
+var _crmListo = false; // se activa después del init completo
 function showSection(id){
-  console.log('[showSection] id='+id, new Error().stack.split('\n').slice(1,4).join(' | '));
+  // Bloquear durante arranque para evitar que renders llamen showSection
+  if(!_crmListo && !_sesionActual) return;
+  console.log('[showSection] id='+id);
   // Sincronizar nav bar móvil
   var navSecs = ['dashboard','ventas','cotizaciones','clientes','inventario'];
   navSecs.forEach(function(s){
@@ -5884,6 +5887,7 @@ function intentarLogin(){
   if(secInicial) secInicial.classList.add('active');
   var dl=document.getElementById('diag-log');
   if(dl) dl.innerHTML += '<br>7. Login exitoso: '+found.nombre+' llamando refresh()...';
+  _crmListo = true;
   refresh();
   if(dl) dl.innerHTML += '<br>8. refresh() completado post-login';
 }
@@ -6398,19 +6402,18 @@ async function arrancarCRM() {
   // 4. Render — SIEMPRE al final con datos listos
   if (sesionOk) {
     diag('7. Llamando refresh()...');
-    // Mostrar sección correcta SIN llamar showSection (evita loop)
+    // Mostrar sección correcta
     document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
     var secEl = document.getElementById('s-' + _seccionPorDefecto);
-    if(secEl){
-      secEl.classList.add('active');
-      console.log('[arrancar] Sección activada: s-'+_seccionPorDefecto+' display='+window.getComputedStyle(secEl).display);
-    } else {
-      console.error('[arrancar] No se encontró s-'+_seccionPorDefecto);
-    }
+    if(secEl) secEl.classList.add('active');
     refresh();
     diag('8. refresh() completado');
+    // Ahora sí permitir showSection
+    setTimeout(function(){ _crmListo = true; }, 500);
   } else {
     diag('6. Sin sesión - mostrando login');
+    // En login también activar para cuando el usuario entre
+    setTimeout(function(){ _crmListo = true; }, 500);
   }
   // Si no hay sesión activa, el usuario hará login
   // y iniciarSesion() llamará refresh()
