@@ -6397,33 +6397,16 @@ var _origGuardarVenta = null; // se parchea después
   }
 })();
 
-// ── Inicializar sistema de usuarios ──
-(function initUsuarios(){
-  getUsuarios(); // Asegura que admin por defecto exista
-
-  // Restaurar sesión si existe
-  try {
-    var ses = JSON.parse(localStorage.getItem(SES_KEY)||'{}');
-    if(ses && ses.id){
-      var lista   = getUsuarios();
-      var usuario = lista.find(function(u){ return u.id===ses.id && u.activo!==false; });
-      if(usuario && (Date.now()-ses.ts) < 24*60*60*1000){ // 24h
-        _sesionActual = usuario;
-        document.getElementById('login-screen').classList.add('hidden');
-        aplicarRol(usuario);
-        return;
-      }
-    }
-  } catch(e){}
-  // Mostrar login
-})();
+// ── Inicializar usuarios (solo crear admin por defecto) ──
+getUsuarios();
 
 actualizarFechaRespaldo();
 aplicarBrandSidebar();
 actualizarLogoLogin();
 
-// ── Conectar Supabase y cargar datos ──
-(async function(){
+// ── Arranque principal: Supabase → sesión → render ──
+(async function arrancar(){
+  // 1. Intentar cargar desde Supabase
   try{
     var r = await fetch('https://mxevvluvaxhmnfezueuk.supabase.co/rest/v1/inventario?limit=1', {
       headers: _sh
@@ -6437,7 +6420,28 @@ actualizarLogoLogin();
     actualizarIndicadorSupa(false);
     console.log('[CRM] Modo local');
   }
-  refresh();
+
+  // 2. Restaurar sesión o mostrar login
+  var sesRestaurada = false;
+  try{
+    var ses = JSON.parse(localStorage.getItem('brillante_sesion')||'{}');
+    if(ses && ses.id){
+      var lista   = getUsuarios();
+      var usuario = lista.find(function(u){ return u.id===ses.id && u.activo!==false; });
+      if(usuario && (Date.now()-ses.ts) < 24*60*60*1000){
+        _sesionActual = usuario;
+        document.getElementById('login-screen').classList.add('hidden');
+        aplicarRol(usuario);
+        sesRestaurada = true;
+      }
+    }
+  }catch(e){}
+
+  // 3. Render siempre al final, con datos ya cargados
+  if(sesRestaurada){
+    refresh();
+  }
+  // Si no hay sesión, el login la manejará y llamará refresh()
 })();
 </script>
 <script>
