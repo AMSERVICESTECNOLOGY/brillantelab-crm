@@ -3564,7 +3564,18 @@ function refresh(){
       }
     });
     var dl=document.getElementById('diag-log');
-    if(dl) dl.innerHTML += '<br>✅ Todos los renders completados';
+    if(dl){
+      var ls = document.getElementById('login-screen');
+      var sd = document.getElementById('s-dashboard');
+      var lsDisplay = ls ? window.getComputedStyle(ls).display : 'NO EXISTE';
+      var sdDisplay = sd ? window.getComputedStyle(sd).display : 'NO EXISTE';
+      var lsHidden  = ls ? ls.classList.contains('hidden') : 'N/A';
+      dl.innerHTML += '<br>✅ Renders completados';
+      dl.innerHTML += '<br>login-screen display='+lsDisplay+' hidden='+lsHidden;
+      dl.innerHTML += '<br>s-dashboard display='+sdDisplay;
+      dl.innerHTML += '<br>dash-semana existe='+(!!document.getElementById('dash-semana'));
+      dl.innerHTML += '<br>dash-semana valor='+( document.getElementById('dash-semana')?.textContent||'VACIO');
+    }
   }, 0);
 }
 
