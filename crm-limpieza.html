@@ -3769,14 +3769,42 @@ function renderClientes(){
   }).join('');
 }
 
+
+// ── Surtir pedido pendiente (admin) ──
+function surtirPedido(ventaId){
+  var venta = db.ventas.find(function(v){ return v.id===ventaId; });
+  if(!venta){ showToast('❌ Venta no encontrada','red'); return; }
+  if(venta.estado !== 'pendiente'){ showToast('ℹ️ Este pedido ya fue surtido',''); return; }
+
+  // Descontar stock
+  var producto = db.inventario.find(function(i){ return i.id===venta.productoId; });
+  if(producto){
+    producto.stock = parseFloat(((producto.stock||0) - (venta.cantidad||0)).toFixed(4));
+  }
+
+  // Cambiar estado a pagado
+  venta.estado = 'pagado';
+
+  save();
+
+  // Sync Supabase
+  if(_supaConectado){
+    supaUpsert('ventas', [venta]);
+    if(producto) supaUpsert('inventario', [producto]);
+  }
+
+  refresh();
+  showToast('✅ Pedido surtido — stock descontado','green',3000);
+}
+
 function renderVentas(){
   const filtro=document.getElementById('filtro-mes')?.value||'';
   const tbody=document.getElementById('tbl-ventas');
   let list=[...getVentasVisibles()].sort((a,b)=>b.fecha.localeCompare(a.fecha));
   if(filtro)list=list.filter(v=>v.fecha.startsWith(filtro));
   if(!list.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty"><div class="empty-icon">💰</div><div class="empty-text">Sin ventas</div></div></td></tr>';return;}
-  const ec={pagado:'badge-green',credito:'badge-gold',anticipo:'badge-blue'};
-  const el={pagado:'Pagado',credito:'A crédito',anticipo:'Anticipo'};
+  const ec={pagado:'badge-green',credito:'badge-gold',anticipo:'badge-blue',pendiente:'badge-orange'};
+  const el={pagado:'Pagado',credito:'A crédito',anticipo:'Anticipo',pendiente:'📦 Por surtir'};
   tbody.innerHTML=list.map(v=>{
     const canalLabel={menudeo:'🏪 Menudeo',mayorista:'📦 Mayorista',distribuidor:'🚚 Distribuidor'};
     const canalCls={menudeo:'badge-red',mayorista:'badge-gold',distribuidor:'badge-blue'};
