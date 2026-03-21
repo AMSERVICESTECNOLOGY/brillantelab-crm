@@ -3444,7 +3444,7 @@ function abrirResolucion(sinStock){
   document.getElementById('res-fabricar-detalle').style.display = 'none';
   document.getElementById('res-btn-confirmar').style.display    = 'none';
 
-  document.getElementById('modal-resolucion').classList.add('open');
+  var mr=document.getElementById('modal-resolucion'); if(mr){ mr.style.display='flex'; }
 }
 
 function selResolucion(opcion){
@@ -3469,7 +3469,7 @@ function selResolucion(opcion){
 }
 
 function cerrarResolucion(){
-  document.getElementById('modal-resolucion').classList.remove('open');
+  var mr2=document.getElementById('modal-resolucion'); if(mr2){ mr2.style.display='none'; }
   _ventaPendiente   = null;
   _resolucionOpcion = null;
   showToast('Venta cancelada — no se registró nada','',3000);
@@ -3526,7 +3526,7 @@ function confirmarResolucion(){
     showToast('✅ Venta registrada — stock en negativo como recordatorio','gold',4000);
   }
 
-  document.getElementById('modal-resolucion').classList.remove('open');
+  var mr2=document.getElementById('modal-resolucion'); if(mr2){ mr2.style.display='none'; }
   _ventaPendiente   = null;
   _resolucionOpcion = null;
 }
@@ -5989,15 +5989,18 @@ function generarPDF(cotId){
     win.document.close();
   } else {
     // Fallback: usar overlay interno si el popup está bloqueado
-    document.getElementById('cot-preview-folio').textContent = cot.folio + ' · ' + cot.clienteNombre;
-    document.getElementById('cot-preview-body').innerHTML = html;
-    document.getElementById('cot-preview-overlay').classList.add('open');
+    var cpo=document.getElementById('cot-preview-overlay');
+    var cpf=document.getElementById('cot-preview-folio');
+    var cpb=document.getElementById('cot-preview-body');
+    if(cpf) cpf.textContent = cot.folio + ' · ' + cot.clienteNombre;
+    if(cpb) cpb.innerHTML = html;
+    if(cpo){ cpo.style.display='flex'; }
     showToast('⚠️ Si no abre el PDF, permite popups en tu navegador','red',5000);
   }
 }
 
 function cerrarPreview(){
-  document.getElementById('cot-preview-overlay').classList.remove('open');
+  var cp=document.getElementById('cot-preview-overlay'); if(cp){ cp.style.display='none'; }
 }
 
 
@@ -6747,6 +6750,55 @@ arrancarCRM();
 </script>
 
 
+
+<!-- ── MODAL RESOLUCIÓN DE STOCK ── -->
+<div class="modal-overlay" id="modal-resolucion" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;align-items:center;justify-content:center;">
+  <div class="modal" style="max-width:500px;width:96%">
+    <div class="modal-header">
+      <h3>⚠️ Stock insuficiente</h3>
+      <button class="modal-close" onclick="cerrarResolucion()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Los siguientes productos no tienen stock suficiente. ¿Cómo deseas proceder?</p>
+      <div id="resolucion-productos-lista" style="margin-bottom:16px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div id="res-card-compra" onclick="selResolucion('compra')" style="border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:.15s">
+          <div style="font-size:24px">🛒</div><div style="font-size:12px;font-weight:700;margin-top:6px">Compré por fuera</div><div style="font-size:10px;color:var(--muted)">Stock queda en 0</div>
+        </div>
+        <div id="res-card-fabricar" onclick="selResolucion('fabricar')" style="border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:.15s">
+          <div style="font-size:24px">🏭</div><div style="font-size:12px;font-weight:700;margin-top:6px">Voy a fabricar</div><div style="font-size:10px;color:var(--muted)">Crea orden de producción</div>
+        </div>
+        <div id="res-card-ignorar" onclick="selResolucion('ignorar')" style="border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:.15s">
+          <div style="font-size:24px">📝</div><div style="font-size:12px;font-weight:700;margin-top:6px">Registrar igual</div><div style="font-size:10px;color:var(--muted)">Stock queda negativo</div>
+        </div>
+      </div>
+      <div id="res-fabricar-detalle" style="display:none;background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px">
+        <div style="font-weight:700;margin-bottom:8px">Órdenes a crear:</div>
+        <div id="res-fabricar-lista"></div>
+        <div style="margin-top:10px">
+          <label style="font-size:12px;color:var(--muted)">Estado inicial:</label>
+          <select id="res-prod-estado" style="margin-left:8px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
+            <option value="En proceso">En proceso</option>
+            <option value="Completada">Completada</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button onclick="cerrarResolucion()" class="btn btn-ghost">Cancelar</button>
+        <button id="res-btn-confirmar" onclick="confirmarResolucion()" class="btn btn-primary" style="display:none">✅ Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PREVIEW COTIZACIÓN (fallback popup bloqueado) ── -->
+<div id="cot-preview-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;flex-direction:column;">
+  <div style="background:var(--surface);padding:12px 20px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-weight:700" id="cot-preview-folio">Cotización</span>
+    <button onclick="cerrarPreview()" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+  </div>
+  <div id="cot-preview-body" style="flex:1;overflow:auto;background:#fff"></div>
+</div>
 <!-- ── CONFIRM OVERLAY ── -->
 <div id="confirm-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:5000;display:none;align-items:center;justify-content:center;">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);">
