@@ -3687,6 +3687,7 @@ var MP_CAT_ICON = {
 
 function renderMP(){
   var alertsEl  = document.getElementById('alerts-mp');
+  console.log('[renderMP] db.materiaprima='+( db.materiaprima||[]).length);
   var contenido = document.getElementById('mp-contenido');
   if(!contenido) return;
 
@@ -3927,7 +3928,11 @@ function renderCostos(){
 
 function renderCobranza(){
   const tbody=document.getElementById('tbl-cobranza');
-  const pendientes=getVentasVisibles().filter(v=>v.estado!=='pagado');
+  if(!tbody){ console.error('tbl-cobranza NO ENCONTRADO'); return; }
+  const todasVentas = getVentasVisibles();
+  console.log('[renderCobranza] ventas total='+todasVentas.length);
+  const pendientes=todasVentas.filter(v=>v.estado!=='pagado');
+  console.log('[renderCobranza] pendientes='+pendientes.length);
   if(!pendientes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin cuentas pendientes</div></div></td></tr>';return;}
   const now=new Date();now.setHours(0,0,0,0);
   tbody.innerHTML=[...pendientes].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(v=>{
