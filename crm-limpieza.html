@@ -1494,6 +1494,77 @@ body.rol-vendedor .sidebar-footer{display:none!important;}
   </div>
 </div>
 
+<!-- ══ RESPALDO ══ -->
+<div class="section" id="s-respaldo">
+  <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
+    <div class="kpi green">
+      <div class="kpi-label">EXPORTAR</div>
+      <div class="kpi-val green" style="font-size:32px">💾</div>
+      <div class="kpi-sub">Guardar copia de seguridad</div>
+    </div>
+    <div class="kpi blue">
+      <div class="kpi-label">IMPORTAR</div>
+      <div class="kpi-val blue" style="font-size:32px">📂</div>
+      <div class="kpi-sub">Restaurar desde respaldo</div>
+    </div>
+    <div class="kpi red">
+      <div class="kpi-label">REINICIAR</div>
+      <div class="kpi-val red" style="font-size:32px">🔄</div>
+      <div class="kpi-sub">Vaciar todos los datos</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">💾 Respaldo de Datos</div></div>
+    <div class="panel-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">💾</div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:6px">Exportar datos</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Descarga un archivo JSON con todos tus datos: clientes, ventas, inventario, cotizaciones y configuración.</div>
+          <button class="btn btn-primary" onclick="exportarDatos()" style="width:100%">💾 Exportar ahora</button>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px" id="backup-info">Último respaldo: nunca</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">📂</div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:6px">Importar respaldo</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Restaura tus datos desde un archivo JSON exportado anteriormente. Esto reemplazará los datos actuales.</div>
+          <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="width:100%">📂 Seleccionar archivo</button>
+          <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarDatos(event)">
+        </div>
+      </div>
+
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:800;margin-bottom:4px">☁️ Sincronización Supabase</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Los datos se guardan automáticamente en la nube. Accede desde cualquier dispositivo.</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="supa-status-text" style="font-size:13px;color:var(--green);font-weight:700">☁️ Conectado</span>
+        </div>
+      </div>
+
+      <div style="background:rgba(255,59,92,.05);border:1.5px solid rgba(255,59,92,.2);border-radius:12px;padding:20px">
+        <div style="font-size:16px;font-weight:800;color:var(--red);margin-bottom:4px">⚠️ Zona de peligro</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Esta acción eliminará TODOS los datos del CRM. Asegúrate de exportar un respaldo antes.</div>
+        <button class="btn btn-ghost" onclick="confirmarReset()" style="color:var(--red);border-color:rgba(255,59,92,.3)">🔄 Reiniciar CRM (vaciar datos)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel admin-only">
+    <div class="panel-header"><div class="panel-title">📦 Catálogos de Importación</div></div>
+    <div class="panel-body">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Los datos ya están en Supabase. Usa estos botones solo si necesitas reimportar catálogos.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="btn btn-ghost" onclick="importarMateriaPrima()" style="justify-content:flex-start">🧪 Importar MP (89 insumos)</button>
+        <button class="btn btn-ghost" onclick="importarCatalogoProliversGinez()" style="justify-content:flex-start">📦 Catálogo Proliver/Ginez</button>
+        <button class="btn btn-ghost" onclick="importarJarceriaBrimer()" style="justify-content:flex-start">🧹 Jarcería + Brimer</button>
+        <button class="btn btn-ghost" onclick="importarRanitaAbarrotes(); setTimeout(importarRanitaExtra,500); setTimeout(importarRanitaLote3,1000)" style="justify-content:flex-start">🛒 Abarrotes + Licores (~2,000)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- MODAL DILUCIÓN -->
 <div class="modal-bg" id="modal-dilucion">
   <div class="modal">
@@ -2045,77 +2116,6 @@ body.rol-vendedor .sidebar-footer{display:none!important;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-caja')">Cancelar</button>
       <button class="btn btn-primary" id="caja-btn-guardar" onclick="guardarMovimientoCaja()">✅ Registrar movimiento</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- ══ RESPALDO ══ -->
-<div class="section" id="s-respaldo">
-  <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
-    <div class="kpi green">
-      <div class="kpi-label">EXPORTAR</div>
-      <div class="kpi-val green" style="font-size:32px">💾</div>
-      <div class="kpi-sub">Guardar copia de seguridad</div>
-    </div>
-    <div class="kpi blue">
-      <div class="kpi-label">IMPORTAR</div>
-      <div class="kpi-val blue" style="font-size:32px">📂</div>
-      <div class="kpi-sub">Restaurar desde respaldo</div>
-    </div>
-    <div class="kpi red">
-      <div class="kpi-label">REINICIAR</div>
-      <div class="kpi-val red" style="font-size:32px">🔄</div>
-      <div class="kpi-sub">Vaciar todos los datos</div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-header"><div class="panel-title">💾 Respaldo de Datos</div></div>
-    <div class="panel-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px">
-          <div style="font-size:24px;margin-bottom:10px">💾</div>
-          <div style="font-weight:800;font-size:15px;margin-bottom:6px">Exportar datos</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Descarga un archivo JSON con todos tus datos: clientes, ventas, inventario, cotizaciones y configuración.</div>
-          <button class="btn btn-primary" onclick="exportarDatos()" style="width:100%">💾 Exportar ahora</button>
-          <div style="font-size:11px;color:var(--muted);margin-top:8px" id="backup-info">Último respaldo: nunca</div>
-        </div>
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px">
-          <div style="font-size:24px;margin-bottom:10px">📂</div>
-          <div style="font-weight:800;font-size:15px;margin-bottom:6px">Importar respaldo</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Restaura tus datos desde un archivo JSON exportado anteriormente. Esto reemplazará los datos actuales.</div>
-          <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="width:100%">📂 Seleccionar archivo</button>
-          <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarDatos(event)">
-        </div>
-      </div>
-
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
-        <div style="font-size:16px;font-weight:800;margin-bottom:4px">☁️ Sincronización Supabase</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Los datos se guardan automáticamente en la nube. Accede desde cualquier dispositivo.</div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span id="supa-status-text" style="font-size:13px;color:var(--green);font-weight:700">☁️ Conectado</span>
-        </div>
-      </div>
-
-      <div style="background:rgba(255,59,92,.05);border:1.5px solid rgba(255,59,92,.2);border-radius:12px;padding:20px">
-        <div style="font-size:16px;font-weight:800;color:var(--red);margin-bottom:4px">⚠️ Zona de peligro</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Esta acción eliminará TODOS los datos del CRM. Asegúrate de exportar un respaldo antes.</div>
-        <button class="btn btn-ghost" onclick="confirmarReset()" style="color:var(--red);border-color:rgba(255,59,92,.3)">🔄 Reiniciar CRM (vaciar datos)</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel admin-only">
-    <div class="panel-header"><div class="panel-title">📦 Catálogos de Importación</div></div>
-    <div class="panel-body">
-      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Los datos ya están en Supabase. Usa estos botones solo si necesitas reimportar catálogos.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <button class="btn btn-ghost" onclick="importarMateriaPrima()" style="justify-content:flex-start">🧪 Importar MP (89 insumos)</button>
-        <button class="btn btn-ghost" onclick="importarCatalogoProliversGinez()" style="justify-content:flex-start">📦 Catálogo Proliver/Ginez</button>
-        <button class="btn btn-ghost" onclick="importarJarceriaBrimer()" style="justify-content:flex-start">🧹 Jarcería + Brimer</button>
-        <button class="btn btn-ghost" onclick="importarRanitaAbarrotes(); setTimeout(importarRanitaExtra,500); setTimeout(importarRanitaLote3,1000)" style="justify-content:flex-start">🛒 Abarrotes + Licores (~2,000)</button>
-      </div>
     </div>
   </div>
 </div>
