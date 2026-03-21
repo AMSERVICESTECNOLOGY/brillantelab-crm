@@ -641,6 +641,14 @@ body.rol-vendedor .sidebar-footer{display:none!important;}
 
 <!-- ══ DASHBOARD ══ -->
 <div class="section active" id="s-dashboard">
+<div id="diag-box" style="background:#1a2340;border:2px solid #f5a623;border-radius:12px;padding:16px;margin-bottom:16px;font-family:monospace;font-size:12px;color:#fff">
+  <div style="color:#f5a623;font-weight:700;margin-bottom:8px">🔍 DIAGNÓSTICO CRM</div>
+  <div id="diag-log">Iniciando...</div>
+  <button onclick="document.getElementById('diag-box').style.display='none'" 
+    style="margin-top:8px;background:#333;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer">
+    Ocultar
+  </button>
+</div>
   <div class="week-goal">
     <h3>Ventas — últimos 7 días</h3>
     <div class="amount" id="dash-semana">$0</div>
@@ -3518,6 +3526,8 @@ document.addEventListener('keydown', function(e){
 
 // ── Render ──
 function refresh(){
+  var dl=document.getElementById('diag-log');
+  if(dl) dl.innerHTML += '<br>9. refresh() ejecutando renders...';
   renderDashboard();
   renderVentas();
   renderCobranza();
@@ -6293,6 +6303,12 @@ var _origGuardarVenta = null; // se parchea después
 // ARRANQUE PRINCIPAL
 // ════════════════════════════════════════════════
 async function arrancarCRM() {
+  function diag(msg){ 
+    var el=document.getElementById('diag-log');
+    if(el) el.innerHTML += '<br>'+msg;
+    console.log('[DIAG]',msg);
+  }
+  diag('1. arrancarCRM iniciado');
   // 1. UI inicial
   actualizarFechaRespaldo();
   aplicarBrandSidebar();
@@ -6300,18 +6316,20 @@ async function arrancarCRM() {
 
   // 2. Conectar Supabase y cargar datos
   try {
+    diag('2. Conectando Supabase...');
     var test = await fetch(SUPA_URL + '/rest/v1/clientes?limit=1', {headers: _sh});
     if (test.ok) {
+      diag('3. Supabase OK - cargando datos...');
       actualizarIndicadorSupa(true);
-      showToast('☁️ Conectando...', '', 10000);
       await cargarDesdeSupabase();
-      showToast('✅ Datos cargados', 'green', 2000);
+      diag('4. Datos cargados: inv='+db.inventario.length+' cli='+db.clientes.length+' ven='+db.ventas.length);
     }
   } catch(e) {
+    diag('3. ERROR Supabase: '+e.message);
     actualizarIndicadorSupa(false);
-    console.log('[CRM] Modo local');
   }
 
+  diag('5. Verificando sesión...');
   // 3. Restaurar sesión
   var sesionOk = false;
   try {
@@ -6326,13 +6344,18 @@ async function arrancarCRM() {
         document.getElementById('login-screen').classList.add('hidden');
         aplicarRol(usr);
         sesionOk = true;
+        diag('6. Sesión restaurada: '+usr.nombre+' ('+usr.rol+')');
       }
     }
-  } catch(e) {}
+  } catch(e) { diag('5b. Error sesión: '+e.message); }
 
   // 4. Render — SIEMPRE al final con datos listos
   if (sesionOk) {
+    diag('7. Llamando refresh()...');
     refresh();
+    diag('8. refresh() completado');
+  } else {
+    diag('6. Sin sesión - mostrando login');
   }
   // Si no hay sesión activa, el usuario hará login
   // y iniciarSesion() llamará refresh()
