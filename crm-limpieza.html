@@ -4267,6 +4267,25 @@ function toggleActivoInv(id){
   renderInventario();
 }
 
+
+function toggleGestorCats(){
+  var body  = document.getElementById('gestor-cats-body');
+  var arrow = document.getElementById('cats-arrow');
+  if(!body) return;
+  var abierto = body.style.display !== 'none';
+  body.style.display  = abierto ? 'none' : 'block';
+  if(arrow) arrow.style.transform = abierto ? 'rotate(0)' : 'rotate(180deg)';
+  if(!abierto) renderGestorCategorias();
+}
+
+function actualizarResumenCats(){
+  var el = document.getElementById('cats-resumen');
+  if(!el) return;
+  var cats = getCategorias();
+  var inactivas = cats.filter(function(c){ return c.activa===false; }).length;
+  el.textContent = inactivas > 0 ? '('+inactivas+' inhabilitada'+(inactivas>1?'s':'')+')' : '(todas activas)';
+}
+
 var _mostrarInactivos = false;
 function toggleMostrarInactivos(){
   _mostrarInactivos = !_mostrarInactivos;
