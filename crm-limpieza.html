@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Brillantelab CRM">
-<title>Brillantelab CRM v3.0</title>
+<title>Brillantelab CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -641,14 +641,7 @@ body.rol-vendedor .sidebar-footer{display:none!important;}
 
 <!-- ══ DASHBOARD ══ -->
 <div class="section active" id="s-dashboard">
-<div id="diag-box" style="background:#1a2340;border:2px solid #f5a623;border-radius:12px;padding:16px;margin-bottom:16px;font-family:monospace;font-size:12px;color:#fff">
-  <div style="color:#f5a623;font-weight:700;margin-bottom:8px">🔍 DIAGNÓSTICO CRM</div>
-  <div id="diag-log">Iniciando...</div>
-  <button onclick="document.getElementById('diag-box').style.display='none'" 
-    style="margin-top:8px;background:#333;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer">
-    Ocultar
-  </button>
-</div>
+
   <div class="week-goal">
     <h3>Ventas — últimos 7 días</h3>
     <div class="amount" id="dash-semana">$0</div>
@@ -2217,7 +2210,6 @@ var _crmListo = false; // se activa después del init completo
 function showSection(id){
   // Bloquear durante arranque para evitar que renders llamen showSection
   if(!_crmListo) return;
-  console.log('[showSection] id='+id);
   // Sincronizar nav bar móvil
   var navSecs = ['dashboard','ventas','cotizaciones','clientes','inventario'];
   navSecs.forEach(function(s){
@@ -2280,13 +2272,7 @@ function showSection(id){
     'usuarios':     function(){ renderUsuarios(); }
   };
   if(renderMap[id]){
-    try { 
-      renderMap[id](); 
-    } catch(e){ 
-      console.error('[showSection] ERROR en render '+id+':', e.message, e.stack);
-      var dl=document.getElementById('diag-log');
-      if(dl) dl.innerHTML += '<br>❌ ERROR render '+id+': '+e.message;
-    }
+    try { renderMap[id](); } catch(e){ console.error('render '+id, e); }
   }
 
   // Nav móvil
@@ -3695,7 +3681,6 @@ var MP_CAT_ICON = {
 
 function renderMP(){
   var alertsEl  = document.getElementById('alerts-mp');
-  console.log('[renderMP] db.materiaprima='+( db.materiaprima||[]).length);
   var contenido = document.getElementById('mp-contenido');
   if(!contenido) return;
 
@@ -3936,11 +3921,7 @@ function renderCostos(){
 
 function renderCobranza(){
   const tbody=document.getElementById('tbl-cobranza');
-  if(!tbody){ console.error('tbl-cobranza NO ENCONTRADO'); return; }
-  const todasVentas = getVentasVisibles();
-  console.log('[renderCobranza] ventas total='+todasVentas.length);
-  const pendientes=todasVentas.filter(v=>v.estado!=='pagado');
-  console.log('[renderCobranza] pendientes='+pendientes.length);
+  const pendientes=getVentasVisibles().filter(v=>v.estado!=='pagado');
   if(!pendientes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin cuentas pendientes</div></div></td></tr>';return;}
   const now=new Date();now.setHours(0,0,0,0);
   tbody.innerHTML=[...pendientes].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(v=>{
@@ -5898,11 +5879,8 @@ function intentarLogin(){
   document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
   var secInicial = document.getElementById('s-' + _seccionPorDefecto);
   if(secInicial) secInicial.classList.add('active');
-  var dl=document.getElementById('diag-log');
-  if(dl) dl.innerHTML += '<br>7. Login exitoso: '+found.nombre+' llamando refresh()...';
   _crmListo = true;
   refresh();
-  if(dl) dl.innerHTML += '<br>8. refresh() completado post-login';
 }
 
 function cerrarSesion(){
@@ -6366,34 +6344,22 @@ var _origGuardarVenta = null; // se parchea después
 // ARRANQUE PRINCIPAL
 // ════════════════════════════════════════════════
 async function arrancarCRM() {
-  function diag(msg){ 
-    var el=document.getElementById('diag-log');
-    if(el) el.innerHTML += '<br>'+msg;
-    console.log('[DIAG]',msg);
-  }
-  diag('1. arrancarCRM iniciado');
-  // 1. UI inicial
   actualizarFechaRespaldo();
   aplicarBrandSidebar();
   actualizarLogoLogin();
 
-  // 2. Conectar Supabase y cargar datos
+  // Conectar Supabase y cargar datos
   try {
-    diag('2. Conectando Supabase...');
     var test = await fetch(SUPA_URL + '/rest/v1/clientes?limit=1', {headers: _sh});
     if (test.ok) {
-      diag('3. Supabase OK - cargando datos...');
       actualizarIndicadorSupa(true);
       await cargarDesdeSupabase();
-      diag('4. Datos cargados: inv='+db.inventario.length+' cli='+db.clientes.length+' ven='+db.ventas.length);
     }
   } catch(e) {
-    diag('3. ERROR Supabase: '+e.message);
     actualizarIndicadorSupa(false);
   }
 
-  diag('5. Verificando sesión...');
-  // 3. Restaurar sesión
+  // Restaurar sesión
   var sesionOk = false;
   try {
     var ses = JSON.parse(localStorage.getItem(SES_KEY) || '{}');
@@ -6407,51 +6373,29 @@ async function arrancarCRM() {
         document.getElementById('login-screen').classList.add('hidden');
         aplicarRol(usr);
         sesionOk = true;
-        diag('6. Sesión restaurada: '+usr.nombre+' ('+usr.rol+')');
       }
     }
-  } catch(e) { diag('5b. Error sesión: '+e.message); }
+  } catch(e) {}
 
-  // 4. Render — SIEMPRE al final con datos listos
+  // Activar navegación y render
+  setTimeout(function(){
+    _crmListo = true;
+    var nav = document.querySelector('.nav');
+    if(nav && !nav._listenerAdded){
+      nav._listenerAdded = true;
+      nav.addEventListener('click', function(e){
+        var item = e.target.closest('.nav-item[data-sec]');
+        if(item) showSection(item.dataset.sec);
+      });
+    }
+  }, 300);
+
   if (sesionOk) {
-    diag('7. Llamando refresh()...');
-    // Mostrar sección correcta
     document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
     var secEl = document.getElementById('s-' + _seccionPorDefecto);
     if(secEl) secEl.classList.add('active');
     refresh();
-    diag('8. refresh() completado');
-    // Ahora sí permitir showSection
-    setTimeout(function(){
-    _crmListo = true;
-    // Listener único en el nav padre (delegación de eventos)
-    var nav = document.querySelector('.nav');
-    if(nav && !nav._listenerAdded){
-      nav._listenerAdded = true;
-      nav.addEventListener('click', function(e){
-        var item = e.target.closest('.nav-item[data-sec]');
-        if(item) showSection(item.dataset.sec);
-      });
-    }
-  }, 500);
-  } else {
-    diag('6. Sin sesión - mostrando login');
-    // En login también activar para cuando el usuario entre
-    setTimeout(function(){
-    _crmListo = true;
-    // Listener único en el nav padre (delegación de eventos)
-    var nav = document.querySelector('.nav');
-    if(nav && !nav._listenerAdded){
-      nav._listenerAdded = true;
-      nav.addEventListener('click', function(e){
-        var item = e.target.closest('.nav-item[data-sec]');
-        if(item) showSection(item.dataset.sec);
-      });
-    }
-  }, 500);
   }
-  // Si no hay sesión activa, el usuario hará login
-  // y iniciarSesion() llamará refresh()
 }
 
 // Asegurar admin por defecto
