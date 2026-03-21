@@ -3558,16 +3558,17 @@ function del(arr, id){
   var lbl = CONFIRM_LABELS[arr] || {title:'¿Eliminar este registro?', msg:'Esta acción se puede deshacer durante 8 segundos.'};
   document.getElementById('confirm-title').textContent = lbl.title;
   document.getElementById('confirm-msg').textContent   = lbl.msg + ' Tendrás 8 segundos para deshacer.';
-  document.getElementById('confirm-overlay').classList.add('open');
+  var co=document.getElementById('confirm-overlay'); if(co){ co.style.display='flex'; }
 }
 
 function confirmCancel(){
   _confirmPending = null;
-  document.getElementById('confirm-overlay').classList.remove('open');
+  var el = document.getElementById('confirm-overlay');
+  if(el){ el.style.display='none'; }
 }
 
 function confirmOk(){
-  document.getElementById('confirm-overlay').classList.remove('open');
+  var co2=document.getElementById('confirm-overlay'); if(co2){ co2.style.display='none'; }
   if(!_confirmPending) return;
   var arr = _confirmPending.arr;
   var id  = _confirmPending.id;
@@ -3631,9 +3632,9 @@ function confirmOk(){
                  costos:'gasto', cotizaciones:'cotización', caja:'movimiento', produccion:'orden'};
   document.getElementById('toast-undo-msg').textContent = '🗑 ' + (nombres[arr]||'registro') + ' eliminado';
   var tu = document.getElementById('toast-undo');
-  tu.classList.add('show');
+  if(tu){ tu.style.display='flex'; tu.style.transform='translateX(-50%) translateY(0)'; }
   _undoTimer = setTimeout(function(){
-    tu.classList.remove('show');
+    if(tu){ tu.style.display='none'; }
     _undoStack = null;
   }, 8000);
 }
@@ -3641,7 +3642,7 @@ function confirmOk(){
 function undoDelete(){
   if(!_undoStack) return;
   if(_undoTimer) clearTimeout(_undoTimer);
-  document.getElementById('toast-undo').classList.remove('show');
+  var tu2=document.getElementById('toast-undo'); if(tu2){ tu2.style.display='none'; }
 
   var s = _undoStack;
   _undoStack = null;
@@ -6646,5 +6647,23 @@ arrancarCRM();
 
 </script>
 
+
+<!-- ── CONFIRM OVERLAY ── -->
+<div id="confirm-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:5000;display:none;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px" id="confirm-title">¿Eliminar este registro?</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6" id="confirm-msg">Esta acción se puede deshacer durante 8 segundos.</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="confirmCancel()" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:10px 20px;cursor:pointer;font-weight:700;font-size:13px">Cancelar</button>
+      <button onclick="confirmOk()" style="background:var(--red,#ff3b5c);color:#fff;border:none;border-radius:8px;padding:10px 20px;cursor:pointer;font-weight:700;font-size:13px">🗑 Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST UNDO ── -->
+<div id="toast-undo" style="position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a2033;color:#fff;border-radius:12px;padding:12px 20px;display:none;align-items:center;gap:12px;font-size:13px;font-weight:600;z-index:9999;">
+  <span id="toast-undo-msg">🗑 registro eliminado</span>
+  <button onclick="undoDelete()" style="background:#0057ff;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">↩ Deshacer</button>
+</div>
 </body>
 </html>
