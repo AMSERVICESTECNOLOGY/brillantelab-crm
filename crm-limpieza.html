@@ -3526,6 +3526,8 @@ document.addEventListener('keydown', function(e){
 
 // ── Render ──
 function refresh(){
+  // No renderizar si el usuario no ha iniciado sesión
+  if(!_sesionActual) return;
   var dl=document.getElementById('diag-log');
   if(dl) dl.innerHTML += '<br>9. refresh() ejecutando renders...';
   renderDashboard();
@@ -5841,7 +5843,10 @@ function intentarLogin(){
   errEl.classList.remove('show');
   document.getElementById('login-screen').classList.add('hidden');
   aplicarRol(found);
+  var dl=document.getElementById('diag-log');
+  if(dl) dl.innerHTML += '<br>7. Login exitoso: '+found.nombre+' llamando refresh()...';
   refresh();
+  if(dl) dl.innerHTML += '<br>8. refresh() completado post-login';
 }
 
 function cerrarSesion(){
