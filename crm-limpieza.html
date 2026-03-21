@@ -2212,6 +2212,7 @@ const sections={
 };
 
 function showSection(id){
+  console.log('[showSection] llamado con id='+id);
   // Sincronizar nav bar móvil
   var navSecs = ['dashboard','ventas','cotizaciones','clientes','inventario'];
   navSecs.forEach(function(s){
@@ -6400,7 +6401,12 @@ async function arrancarCRM() {
     // Mostrar sección correcta SIN llamar showSection (evita loop)
     document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
     var secEl = document.getElementById('s-' + _seccionPorDefecto);
-    if(secEl) secEl.classList.add('active');
+    if(secEl){
+      secEl.classList.add('active');
+      console.log('[arrancar] Sección activada: s-'+_seccionPorDefecto+' display='+window.getComputedStyle(secEl).display);
+    } else {
+      console.error('[arrancar] No se encontró s-'+_seccionPorDefecto);
+    }
     refresh();
     diag('8. refresh() completado');
   } else {
