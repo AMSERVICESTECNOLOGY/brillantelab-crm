@@ -2212,7 +2212,7 @@ const sections={
 };
 
 function showSection(id){
-  console.log('[showSection] llamado con id='+id);
+  console.log('[showSection] id='+id, new Error().stack.split('\n').slice(1,4).join(' | '));
   // Sincronizar nav bar móvil
   var navSecs = ['dashboard','ventas','cotizaciones','clientes','inventario'];
   navSecs.forEach(function(s){
