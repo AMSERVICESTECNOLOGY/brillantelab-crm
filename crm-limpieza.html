@@ -3530,19 +3530,41 @@ function refresh(){
   if(!_sesionActual) return;
   var dl=document.getElementById('diag-log');
   if(dl) dl.innerHTML += '<br>9. refresh() ejecutando renders...';
-  renderDashboard();
-  renderVentas();
-  renderCobranza();
+  var renders = [
+    ['renderDashboard', renderDashboard],
+    ['renderVentas', renderVentas],
+    ['renderCobranza', renderCobranza]
+  ];
+  renders.forEach(function(pair){
+    try { pair[1](); } 
+    catch(e){ 
+      var dl=document.getElementById('diag-log');
+      if(dl) dl.innerHTML += '<br>❌ ERROR en '+pair[0]+': '+e.message;
+      console.error(pair[0], e);
+    }
+  });
   setTimeout(function(){
-    renderClientes();
-    renderMP();
-    renderProduccion();
-    renderInventario();
-    renderCostos();
-    renderCotizaciones();
-    renderGanancias();
-    renderCaja();
-    renderRecetas();
+    var renders2 = [
+      ['renderClientes', renderClientes],
+      ['renderMP', renderMP],
+      ['renderProduccion', renderProduccion],
+      ['renderInventario', renderInventario],
+      ['renderCostos', renderCostos],
+      ['renderCotizaciones', renderCotizaciones],
+      ['renderGanancias', renderGanancias],
+      ['renderCaja', renderCaja],
+      ['renderRecetas', renderRecetas]
+    ];
+    renders2.forEach(function(pair){
+      try { pair[1](); }
+      catch(e){
+        var dl=document.getElementById('diag-log');
+        if(dl) dl.innerHTML += '<br>❌ ERROR en '+pair[0]+': '+e.message;
+        console.error(pair[0], e);
+      }
+    });
+    var dl=document.getElementById('diag-log');
+    if(dl) dl.innerHTML += '<br>✅ Todos los renders completados';
   }, 0);
 }
 
