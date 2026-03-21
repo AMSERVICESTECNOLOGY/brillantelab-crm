@@ -829,9 +829,16 @@ confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0
   </div>
   <div id="alerts-inv"></div>
   <div class="panel">
-    <div class="panel-header">
+    <div class="panel-header" style="flex-wrap:wrap;gap:8px">
       <div class="panel-title">📦 Inventario de Producto Terminado</div>
-      <button class="btn btn-ghost" onclick="recalcularStock()" style="font-size:11px;padding:5px 12px;gap:5px" title="Recalcula el stock de cada producto desde cero usando ventas, producción y ajustes registrados">🔄 Sincronizar stock</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="inv-buscar" type="text" placeholder="🔍 Buscar producto..." oninput="renderInventario()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;width:180px">
+        <select id="inv-filtro-cat" onchange="renderInventario()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px">
+          <option value="">Todas las categorías</option>
+        </select>
+        <button id="btn-mostrar-inactivos" onclick="toggleMostrarInactivos()" class="btn btn-ghost" style="font-size:11px;padding:5px 12px">👁 Ver inactivos</button>
+        <button class="btn btn-ghost" onclick="recalcularStock()" style="font-size:11px;padding:5px 12px" title="Recalcular stock">🔄 Sync stock</button>
+      </div>
     </div>
 
     <table class="tbl">
@@ -2484,6 +2491,12 @@ function closeModal(id){
 
 // Toggle nuevo nombre field when "crear nuevo" selected
 document.addEventListener('DOMContentLoaded', function(){
+  // Event delegation para alertas colapsables
+  document.addEventListener('click', function(e){
+    var el = e.target.closest('[data-toggle-alerta]');
+    if(el) toggleAlertas(el.dataset.toggleAlerta);
+  });
+
   var selDest = document.getElementById('dil-destino');
   if(selDest){
     selDest.addEventListener('change', function(){
@@ -3946,9 +3959,26 @@ function renderMP(){
   if(!contenido) return;
 
   var bajos  = db.materiaprima.filter(m=>m.stock<=m.minimo);
-  if(alertsEl) alertsEl.innerHTML = bajos.map(m=>
-    '<div class="alert alert-orange">⚠️ <strong>'+m.nombre+'</strong> — '+m.stock+' '+m.unidad+' (mínimo: '+m.minimo+')</div>'
-  ).join('');
+  if(alertsEl){
+    if(bajos.length){
+      var isOpenMP = alertsEl._abierto !== false;
+      var rowsHtml = bajos.map(m=>
+        '<div class="alert alert-orange">⚠️ <strong>'+m.nombre+'</strong> — '+m.stock+' '+m.unidad+' (mín: '+m.minimo+')</div>'
+      ).join('');
+      alertsEl.innerHTML =
+        '<div style="background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.25);border-radius:10px;overflow:hidden;margin-bottom:12px">'+
+          '<div data-toggle-alerta="alerts-mp" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;user-select:none">'+
+            '<div style="font-size:13px;font-weight:700;color:var(--gold)">⚠️ '+bajos.length+' insumo'+(bajos.length>1?'s':'')+' bajo de stock</div>'+
+            '<span style="font-size:18px;color:var(--gold);transition:.2s;transform:'+(isOpenMP?'rotate(0)':'rotate(-90deg)')+';display:inline-block" id="mp-alert-arrow">▼</span>'+
+          '</div>'+
+          '<div id="mp-alert-body" style="display:'+(isOpenMP?'block':'none')+'">'+
+            '<div style="padding:0 14px 12px">'+rowsHtml+'</div>'+
+          '</div>'+
+        '</div>';
+    } else {
+      alertsEl.innerHTML='';
+    }
+  }
 
   // KPIs
   var totalValor = db.materiaprima.reduce(function(a,m){ return a+(m.stock*m.costo); },0);
@@ -4119,22 +4149,99 @@ function renderProduccion(){
     '</tr>';}).join('');
 }
 
+
+
+// ── Toggle alertas colapsables ──
+function toggleAlertas(contenedorId){
+  var cont = document.getElementById(contenedorId);
+  if(!cont) return;
+  var isOpen = cont._abierto !== false;
+  cont._abierto = !isOpen;
+  // Actualizar body
+  var bodyId = contenedorId === 'alerts-inv' ? 'inv-alert-body' : 'mp-alert-body';
+  var arrowId = contenedorId === 'alerts-inv' ? 'inv-alert-arrow' : 'mp-alert-arrow';
+  var body  = document.getElementById(bodyId);
+  var arrow = document.getElementById(arrowId);
+  if(body)  body.style.display  = cont._abierto ? 'block' : 'none';
+  if(arrow) arrow.style.transform = cont._abierto ? 'rotate(0)' : 'rotate(-90deg)';
+}
+
+// ── Habilitar / Inhabilitar producto del inventario ──
+function toggleActivoInv(id){
+  var prod = db.inventario.find(function(i){ return i.id===id; });
+  if(!prod) return;
+  prod.activo = prod.activo === false ? true : false;
+  save();
+  if(_supaConectado) supaUpsert('inventario', [prod]);
+  var accion = prod.activo ? 'habilitado ✅' : 'inhabilitado 🚫';
+  showToast(prod.nombre + ' ' + accion, prod.activo ? 'green' : '', 3000);
+  renderInventario();
+}
+
+var _mostrarInactivos = false;
+function toggleMostrarInactivos(){
+  _mostrarInactivos = !_mostrarInactivos;
+  var btn = document.getElementById('btn-mostrar-inactivos');
+  if(btn) btn.textContent = _mostrarInactivos ? '👁 Ver activos' : '👁 Ver inactivos';
+  renderInventario();
+}
+
 function renderInventario(){
   const tbody=document.getElementById('tbl-inv');
   const alerts=document.getElementById('alerts-inv');
+
+  // Poblar filtro categorías
+  var catSel = document.getElementById('inv-filtro-cat');
+  if(catSel){
+    var cats = [...new Set(db.inventario.map(i=>i.categoria||'').filter(Boolean))].sort();
+    var catVal = catSel.value;
+    catSel.innerHTML = '<option value="">Todas las categorías</option>' +
+      cats.map(function(c){ return '<option value="'+c+'"'+(c===catVal?' selected':'')+'>'+c+'</option>'; }).join('');
+  }
+
+  // Filtrar
+  var buscar = (document.getElementById('inv-buscar')?.value||'').toLowerCase();
+  var filtroCat = document.getElementById('inv-filtro-cat')?.value||'';
+
+  var inventarioFiltrado = db.inventario.filter(function(i){
+    var estaActivo = i.activo !== false; // undefined = activo por defecto
+    if(_mostrarInactivos && estaActivo) return false;
+    if(!_mostrarInactivos && !estaActivo) return false;
+    if(buscar && !i.nombre.toLowerCase().includes(buscar)) return false;
+    if(filtroCat && i.categoria !== filtroCat) return false;
+    return true;
+  });
+
   if(!db.inventario.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">Agrega productos o completa una orden de producción</div></div></td></tr>';alerts.innerHTML='';return;}
-  const negativos=db.inventario.filter(i=>i.stock<0);
-  const bajos=db.inventario.filter(i=>i.stock>=0&&i.stock<=i.minimo);
+  if(!inventarioFiltrado.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">'+(buscar||filtroCat?'Sin resultados para el filtro aplicado':(_mostrarInactivos?'No hay productos inactivos':'No hay productos activos'))+'</div></div></td></tr>';return;}
+
+  const negativos=inventarioFiltrado.filter(i=>i.stock<0);
+  const bajos=inventarioFiltrado.filter(i=>i.stock>=0&&i.stock<=i.minimo);
   var alertsHtml='';
   negativos.forEach(i=>{
-    alertsHtml+=`<div class="alert alert-red" style="cursor:pointer" onclick="showSection('produccion')">🔴 <strong>${i.nombre}</strong> — stock NEGATIVO: <strong>${i.stock} ${i.unidad}</strong> — Completa una orden de producción para compensarlo.</div>`;
+    alertsHtml+=`<div class="alert alert-red" style="cursor:pointer" onclick="showSection('produccion')">🔴 <strong>${i.nombre}</strong> — stock NEGATIVO: <strong>${i.stock} ${i.unidad}</strong></div>`;
   });
   bajos.forEach(i=>{
-    alertsHtml+=`<div class="alert alert-red">⚠️ <strong>${i.nombre}</strong> stock bajo — ${i.stock} ${i.unidad} (mínimo: ${i.minimo})</div>`;
+    alertsHtml+=`<div class="alert alert-red">⚠️ <strong>${i.nombre}</strong> — ${i.stock} ${i.unidad} (mín: ${i.minimo})</div>`;
   });
-  alerts.innerHTML=alertsHtml;
+  if(alertsHtml){
+    var total = negativos.length + bajos.length;
+    var isOpen = alerts._abierto !== false;
+    alerts.innerHTML =
+      '<div style="background:rgba(255,59,92,.08);border:1px solid rgba(255,59,92,.2);border-radius:10px;overflow:hidden;margin-bottom:12px">'+
+        '<div data-toggle-alerta="alerts-inv" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;user-select:none">'+
+          '<div style="font-size:13px;font-weight:700;color:var(--red)">⚠️ '+total+' alerta'+(total>1?'s':'')+' de stock</div>'+
+          '<span style="font-size:18px;color:var(--red);transition:.2s;transform:'+(isOpen?'rotate(0)':'rotate(-90deg)')+';display:inline-block" id="inv-alert-arrow">▼</span>'+
+        '</div>'+
+        '<div id="inv-alert-body" style="display:'+(isOpen?'block':'none')+'">'+
+          '<div style="padding:0 14px 12px">'+alertsHtml+'</div>'+
+        '</div>'+
+      '</div>';
+  } else {
+    alerts.innerHTML='';
+  }
   if(!db.inventario.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">Agrega productos o completa una orden de producción</div></div></td></tr>';if(alerts)alerts.innerHTML='';return;}
-  tbody.innerHTML=db.inventario.map(function(i){
+  tbody.innerHTML=inventarioFiltrado.map(function(i){
     const esNegativo = i.stock < 0;
     const pct=esNegativo?0:(i.minimo>0?Math.min(100,(i.stock/Math.max(i.minimo*3,1))*100):60);
     const color=esNegativo?'var(--red)':i.stock<=i.minimo?'var(--red)':i.stock<=i.minimo*2?'var(--gold)':'var(--green)';
