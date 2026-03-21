@@ -847,6 +847,7 @@ confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0
         </select>
         <button id="btn-mostrar-inactivos" onclick="toggleMostrarInactivos()" class="btn btn-ghost" style="font-size:11px;padding:5px 12px">👁 Ver inactivos</button>
         <button class="btn btn-ghost" onclick="recalcularStock()" style="font-size:11px;padding:5px 12px" title="Recalcular stock">🔄 Sync stock</button>
+        <button class="btn btn-ghost" onclick="limpiarInventario()" style="font-size:11px;padding:5px 12px;color:var(--red);border-color:rgba(255,59,92,.3)" title="Eliminar todos los productos">🗑 Limpiar todo</button>
         <button class="btn btn-ghost" onclick="importarProductosBrimer()" style="font-size:11px;padding:5px 12px;color:var(--accent)" title="Importar catálogo Brimer">📥 Importar Brimer</button>
         <button class="btn btn-ghost" onclick="importarProductosJarceria()" style="font-size:11px;padding:5px 12px;color:var(--green)" title="Importar Jarcería">📥 Importar Jarcería</button>
         <button class="btn btn-ghost" onclick="importarCatalogoGinez()" style="font-size:11px;padding:5px 12px;color:var(--accent)" title="Importar/actualizar productos Ginez">📥 Importar Ginez</button>
@@ -1426,20 +1427,51 @@ confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0
       <div class="info-box">Registra aquí los <strong>productos que vendes</strong>. El stock subirá automáticamente al completar órdenes de producción.</div>
       <div class="form-row">
         <div class="form-group"><label>Nombre del Producto *</label><input id="inv-nombre" placeholder="Ej: Jabón líquido multiusos 1L"></div>
+        <div class="form-group"><label>Código / Referencia</label><input id="inv-codigo" placeholder="Ej: LIMALA, JAB-001..."></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label>Categoría</label>
-          <input id="inv-cat" list="inv-cat-list" placeholder="Ej: Desengrasante, Abarrotes..." autocomplete="off">
+          <input id="inv-cat" list="inv-cat-list" placeholder="Ej: Desengrasante, Lavandería..." autocomplete="off">
           <datalist id="inv-cat-list"></datalist>
         </div>
+        <div class="form-group"><label>Proveedor</label>
+          <input id="inv-proveedor" list="inv-prov-list" placeholder="Ej: Ginez, Proliver, Propio..." autocomplete="off">
+          <datalist id="inv-prov-list"></datalist>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Unidad</label>
+          <input id="inv-unidad" list="inv-unidad-list" placeholder="Litros, Piezas, Kg..." autocomplete="off">
+          <datalist id="inv-unidad-list">
+            <option value="Litros"><option value="Piezas"><option value="Kg">
+            <option value="Galones"><option value="Cubetas"><option value="Cajas">
+            <option value="Bolsas"><option value="Frascos"><option value="Garrafones">
+          </datalist>
+        </div>
+        <div class="form-group"><label>Costo de Producción ($)</label><input type="number" id="inv-costo" placeholder="0.00"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Stock Inicial</label><input type="number" id="inv-stock" placeholder="0" min="0"></div>
         <div class="form-group"><label>Stock Mínimo (alerta)</label><input type="number" id="inv-minimo" placeholder="10" min="0"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Unidad</label>
-          <select id="inv-unidad"><option>Litros</option><option>Piezas</option><option>Kg</option><option>Galones</option><option>Cubetas</option></select>
+      <!-- TIPO DE DISPONIBILIDAD -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.15em;margin-bottom:10px">📦 DISPONIBILIDAD</div>
+        <div style="display:flex;gap:10px">
+          <div id="tipo-stock-btn" onclick="setTipoDisp('stock')"
+            style="flex:1;border:2px solid var(--accent);border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:rgba(0,87,255,.08)">
+            <div style="font-size:18px">📦</div>
+            <div style="font-size:12px;font-weight:700;margin-top:4px;color:var(--accent)">En Stock</div>
+            <div style="font-size:10px;color:var(--muted)">Se alerta si falta stock</div>
+          </div>
+          <div id="tipo-pedido-btn" onclick="setTipoDisp('pedido')"
+            style="flex:1;border:2px solid var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
+            <div style="font-size:18px">🛒</div>
+            <div style="font-size:12px;font-weight:700;margin-top:4px;color:var(--muted)">Por Pedido</div>
+            <div style="font-size:10px;color:var(--muted)">Sin alerta de stock</div>
+          </div>
         </div>
-        <div class="form-group"><label>Costo de Producción ($)</label><input type="number" id="inv-costo" placeholder="0.00"></div>
+        <input type="hidden" id="inv-tipo-disp" value="stock">
       </div>
       <!-- PRECIOS POR CANAL -->
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px">
@@ -1462,10 +1494,7 @@ confirm-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0
         <div id="margenes-preview" style="display:none;margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
       </div>
       <input type="hidden" id="inv-precio" value="0">
-      <div class="form-row">
-        <div class="form-group"><label>Proveedor</label><input id="inv-proveedor" placeholder="Ej: Ginez, Proliver, Propio"></div>
-        <div class="form-group"><label>Descripción</label><input id="inv-desc" placeholder="Presentación, uso, volumen..."></div>
-      </div>
+      <div class="form-group"><label>Descripción / Notas</label><input id="inv-desc" placeholder="Presentación, uso, observaciones..."></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-inv')">Cancelar</button>
@@ -2485,7 +2514,7 @@ function openModal(id){
 }
 function closeModal(id){
   if(id==='modal-mp') _editMPId=null;
-  if(id==='modal-inv') _editInvId=null;
+  if(id==='modal-inv'){ _editInvId=null; setTimeout(function(){ setTipoDisp('stock'); actualizarDatalistCat(); },50); }
   if(id==='modal-receta'){ _editRecetaId=null; var ril=document.getElementById('receta-ing-list'); if(ril) ril.innerHTML=''; }
   document.getElementById(id).classList.remove("open");
   // Reset inputs pero NO los hidden (contienen IDs que se necesitan)
@@ -2690,17 +2719,19 @@ function guardarInv(){
   const precioBase  = pMenudeo || pMayorista || pDistrib || 0;
   const data = {
     nombre,
-    categoria:document.getElementById('inv-cat').value.trim()||'General',
-    proveedor:(document.getElementById('inv-proveedor')?.value||'').trim(),
-    stock:parseFloat(document.getElementById('inv-stock').value)||0,
-    minimo:parseFloat(document.getElementById('inv-minimo').value)||10,
-    unidad:document.getElementById('inv-unidad').value,
-    precio: precioBase,
-    precioMenudeo: pMenudeo,
-    precioMayorista: pMayorista,
+    codigo:      (document.getElementById('inv-codigo')?.value||'').trim(),
+    categoria:   (document.getElementById('inv-cat')?.value||'').trim()||'General',
+    proveedor:   (document.getElementById('inv-proveedor')?.value||'').trim(),
+    unidad:      (document.getElementById('inv-unidad')?.value||'Piezas').trim(),
+    tipoDisp:    document.getElementById('inv-tipo-disp')?.value||'stock',
+    stock:       parseFloat(document.getElementById('inv-stock').value)||0,
+    minimo:      parseFloat(document.getElementById('inv-minimo').value)||10,
+    precio:      precioBase,
+    precioMenudeo:     pMenudeo,
+    precioMayorista:   pMayorista,
     precioDistribuidor: pDistrib,
-    costo:parseFloat(document.getElementById('inv-costo').value)||0,
-    desc:(document.getElementById('inv-desc')?.value||'').trim()
+    costo:       parseFloat(document.getElementById('inv-costo').value)||0,
+    desc:        (document.getElementById('inv-desc')?.value||'').trim()
   };
   if(_editInvId){
     const idx=db.inventario.findIndex(i=>i.id===_editInvId);
@@ -2719,18 +2750,20 @@ function editarInv(id){
   openModal('modal-inv');
   setTimeout(function(){
     document.querySelector('#modal-inv .modal-header h3').textContent='✏️ Editar Producto';
-    document.getElementById('inv-nombre').value=p.nombre||'';
-    document.getElementById('inv-cat').value=p.categoria||'';
+    document.getElementById('inv-nombre').value       = p.nombre||'';
+    var codEl=document.getElementById('inv-codigo');   if(codEl) codEl.value=p.codigo||'';
+    document.getElementById('inv-cat').value           = p.categoria||'';
     var provEl=document.getElementById('inv-proveedor'); if(provEl) provEl.value=p.proveedor||'';
-    document.getElementById('inv-stock').value=p.stock||0;
-    document.getElementById('inv-minimo').value=p.minimo||10;
-    document.getElementById('inv-unidad').value=p.unidad||'';
-    document.getElementById('inv-precio-menudeo').value=p.precioMenudeo||p.precio||0;
-    document.getElementById('inv-precio-mayorista').value=p.precioMayorista||0;
-    document.getElementById('inv-precio-distribuidor').value=p.precioDistribuidor||0;
-    document.getElementById('inv-costo').value=p.costo||0;
+    var uniEl=document.getElementById('inv-unidad');   if(uniEl) uniEl.value=p.unidad||'Litros';
+    document.getElementById('inv-stock').value         = p.stock||0;
+    document.getElementById('inv-minimo').value        = p.minimo||10;
+    document.getElementById('inv-precio-menudeo').value    = p.precioMenudeo||p.precio||0;
+    document.getElementById('inv-precio-mayorista').value  = p.precioMayorista||0;
+    document.getElementById('inv-precio-distribuidor').value = p.precioDistribuidor||0;
+    document.getElementById('inv-costo').value         = p.costo||0;
     var descEl=document.getElementById('inv-desc'); if(descEl) descEl.value=p.desc||'';
     actualizarDatalistCat();
+    setTipoDisp(p.tipoDisp||'stock');
     calcMargenes();
   },80);
 }
@@ -4220,13 +4253,36 @@ function toggleCategoria(nombre){
   showToast((cat.activa?'✅ Categoría habilitada: ':'🚫 Categoría inhabilitada: ')+nombre, cat.activa?'green':'', 3000);
 }
 
+
+function setTipoDisp(tipo){
+  document.getElementById('inv-tipo-disp').value = tipo;
+  var btnS = document.getElementById('tipo-stock-btn');
+  var btnP = document.getElementById('tipo-pedido-btn');
+  if(btnS){
+    btnS.style.borderColor  = tipo==='stock'  ? 'var(--accent)' : 'var(--border)';
+    btnS.style.background   = tipo==='stock'  ? 'rgba(0,87,255,.08)' : '';
+    btnS.querySelector('div:nth-child(2)').style.color = tipo==='stock' ? 'var(--accent)' : 'var(--muted)';
+  }
+  if(btnP){
+    btnP.style.borderColor  = tipo==='pedido' ? 'var(--green)' : 'var(--border)';
+    btnP.style.background   = tipo==='pedido' ? 'rgba(0,184,122,.08)' : '';
+    btnP.querySelector('div:nth-child(2)').style.color = tipo==='pedido' ? 'var(--green)' : 'var(--muted)';
+  }
+}
+
 function actualizarDatalistCat(){
+  // Categorías
   var dl = document.getElementById('inv-cat-list');
-  if(!dl) return;
-  var cats = getCategorias();
-  dl.innerHTML = cats.map(function(c){
-    return '<option value="'+c.nombre+'">';
-  }).join('');
+  if(dl){
+    var cats = getCategorias();
+    dl.innerHTML = cats.map(function(c){ return '<option value="'+c.nombre+'">'; }).join('');
+  }
+  // Proveedores
+  var dlProv = document.getElementById('inv-prov-list');
+  if(dlProv){
+    var provs = [...new Set(db.inventario.map(function(i){ return i.proveedor||''; }).filter(Boolean))].sort();
+    dlProv.innerHTML = provs.map(function(p){ return '<option value="'+p+'">'; }).join('');
+  }
 }
 
 function renderGestorCategorias(){
@@ -4298,6 +4354,27 @@ function importarCatalogoGinez(){
   refresh();
   showToast('✅ Catálogo Ginez: ' + agregados + ' nuevos, ' + actualizados + ' actualizados', 'green', 5000);
 }
+
+// ── Limpiar inventario completo ──
+function limpiarInventario(){
+  if(!confirm('⚠️ ¿Eliminar TODOS los productos del inventario?\n\nEsto no se puede deshacer.\n¿Estás seguro?')) return;
+  var total = db.inventario.length;
+  db.inventario = [];
+  save();
+  // Borrar en Supabase — eliminar todos los registros
+  if(_supaConectado){
+    fetch(SUPA_URL+'/rest/v1/inventario?id=neq.00000000', {
+      method: 'DELETE',
+      headers: _sh
+    }).then(function(r){
+      if(r.ok) showToast('✅ Inventario limpiado — '+total+' productos eliminados','green',4000);
+      else showToast('⚠️ Limpiado localmente — verifica Supabase','red',4000);
+    }).catch(function(){ showToast('⚠️ Limpiado localmente — sin conexión','red',4000); });
+  }
+  refresh();
+  showToast('✅ Inventario limpiado — '+total+' productos eliminados','green',4000);
+}
+
 // ── Habilitar / Inhabilitar producto del inventario ──
 function toggleActivoInv(id){
   var prod = db.inventario.find(function(i){ return i.id===id; });
@@ -4415,11 +4492,17 @@ function renderInventario(){
     const stockDisplay = esNegativo
       ? '<span class="stock-negativo">'+i.stock+' ⚠️</span>'
       : '<span style="font-weight:700;color:'+color+'">'+i.stock+'</span>';
-    const estadoBadge = esNegativo
-      ? '<span class="badge-negativo">🔴 NEGATIVO</span>'
-      : (i.stock<=i.minimo?'<span class="badge badge-red">⚠️ Bajo</span>':'<span class="badge badge-green">✓ OK</span>');
+    const esPedido = i.tipoDisp === 'pedido';
+    const estadoBadge = esPedido
+      ? '<span class="badge badge-blue">🛒 Pedido</span>'
+      : esNegativo
+        ? '<span class="badge-negativo">🔴 NEGATIVO</span>'
+        : (i.stock<=i.minimo?'<span class="badge badge-red">⚠️ Bajo</span>':'<span class="badge badge-green">✓ OK</span>');
     return '<tr '+(esNegativo?'style="background:rgba(255,59,92,.04)"':'')+'>'+
-      '<td><div style="font-weight:700">'+i.nombre+'</div><div style="font-size:11px;color:var(--muted)">'+(i.desc?i.desc.slice(0,35)+'…':'')+'</div></td>'+
+      '<td><div style="font-weight:700">'+i.nombre+'</div>'+
+        (i.codigo?'<div style="font-size:10px;color:var(--accent);font-family:monospace">'+i.codigo+'</div>':'')+
+        (i.proveedor?'<div style="font-size:10px;color:var(--muted)">🏢 '+i.proveedor+'</div>':'')+
+      '</td>'+
       '<td><span class="badge badge-blue">'+i.categoria+'</span></td>'+
       '<td><div style="display:flex;align-items:center;gap:8px">'+stockDisplay+'<div class="stock-bar"><div class="stock-fill" style="width:'+pct+'%;background:'+color+'"></div></div></div></td>'+
       '<td class="mono">'+i.minimo+'</td>'+
