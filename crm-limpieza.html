@@ -5409,24 +5409,107 @@ var _cotEditId = null;
 function addCotItem(){
   var list = document.getElementById('cot-items-list');
   var rid  = 'citem-' + uid();
-  var opts = db.inventario.map(function(i){
-    var pMen = i.precioMenudeo || i.precio || 0;
-    var pMay = i.precioMayorista || 0;
-    var pDis = i.precioDistribuidor || 0;
-    return '<option value="'+i.id+'" data-men="'+pMen+'" data-may="'+pMay+'" data-dis="'+pDis+'" data-unidad="'+i.unidad+'">'+i.nombre+'</option>';
-  }).join('');
-  var div = document.createElement('div');
-  div.id = rid;
-  div.style.cssText = 'display:grid;grid-template-columns:2fr 90px 100px 80px 30px;gap:8px;align-items:center;margin-bottom:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px';
+  var div  = document.createElement('div');
+  div.id   = rid;
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 90px 110px 90px 28px;gap:8px;align-items:center;margin-bottom:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px';
   div.innerHTML =
-    '<select onchange="onCotItemChange(&quot;'+rid+'&quot;)" style="font-size:12px">'+
-      '<option value="">— Seleccionar producto —</option>'+opts+
-    '</select>'+
+    '<div class="prod-search-wrap" id="cpsw-'+rid+'">'+
+      '<input type="text" class="prod-search-input ci-buscar" placeholder="🔍 Buscar producto..." '+
+        'oninput="buscarProductoCot(&quot;'+rid+'&quot;)" onfocus="mostrarDropdownCot(&quot;'+rid+'&quot;)" autocomplete="off">'+
+      '<input type="hidden" class="ci-producto-id">'+
+      '<div class="prod-dropdown" id="cpdd-'+rid+'"></div>'+
+    '</div>'+
     '<input type="number" placeholder="Cant." min="1" step="1" value="1" oninput="recalcCot()" style="font-size:12px" class="cot-cant">'+
     '<input type="number" placeholder="Precio" min="0" step="0.01" oninput="recalcCot()" style="font-size:12px" class="cot-precio">'+
     '<input readonly style="font-size:12px;background:var(--surface);font-weight:700;color:var(--green)" class="cot-subtotal" placeholder="$0.00">'+
     '<button type="button" onclick="document.getElementById(&quot;'+rid+'&quot;).remove();recalcCot()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px">✕</button>';
   list.appendChild(div);
+  recalcCot();
+}
+
+// ── Buscador de productos en cotizaciones ──
+var _cotSearchTimeout = {};
+
+function buscarProductoCot(rid){
+  if(_cotSearchTimeout[rid]) clearTimeout(_cotSearchTimeout[rid]);
+  _cotSearchTimeout[rid] = setTimeout(function(){ mostrarDropdownCot(rid); }, 150);
+}
+
+function mostrarDropdownCot(rid){
+  var wrap = document.getElementById('cpsw-'+rid);
+  var dd   = document.getElementById('cpdd-'+rid);
+  if(!wrap || !dd) return;
+  var input = wrap.querySelector('.ci-buscar');
+  var q     = (input ? input.value : '').toLowerCase().trim();
+
+  // Precio según tipo de cliente seleccionado
+  var clienteSel = document.getElementById('cot-cliente');
+  var clienteOpt = clienteSel ? clienteSel.options[clienteSel.selectedIndex] : null;
+  var tipoCliente = clienteOpt ? (clienteOpt.dataset.tipo||'') : '';
+
+  var lista = db.inventario.filter(function(p){
+    if(!q) return true;
+    return p.nombre.toLowerCase().includes(q) ||
+           (p.desc||'').toLowerCase().includes(q) ||
+           (p.categoria||'').toLowerCase().includes(q);
+  }).slice(0,40);
+
+  if(!lista.length){
+    dd.innerHTML = '<div class="prod-dropdown-empty">Sin resultados para "'+q+'"</div>';
+    dd.classList.add('open');
+    return;
+  }
+
+  dd.innerHTML = lista.map(function(p){
+    var precio = p.precioMenudeo || p.precio || 0;
+    if(tipoCliente==='Mayorista'||tipoCliente==='Negocio (hotel/restaurante)') precio = p.precioMayorista || precio;
+    else if(tipoCliente==='Gobierno/Empresa') precio = p.precioDistribuidor || precio;
+    var stockColor = p.stock < 0 ? 'var(--red)' : p.stock===0 ? 'var(--muted)' : 'var(--green)';
+    return '<div class="prod-dropdown-item" onclick="seleccionarProductoCot(&quot;'+rid+'&quot;,&quot;'+p.id+'&quot;)">'+
+      '<div>'+
+        '<div class="pdi-name">'+p.nombre+'</div>'+
+        '<div class="pdi-info">'+p.categoria+' · <span style="color:'+stockColor+'">Stock: '+p.stock+' '+p.unidad+'</span></div>'+
+      '</div>'+
+      '<div class="pdi-price">'+fmt(precio)+'</div>'+
+    '</div>';
+  }).join('');
+  dd.classList.add('open');
+
+  setTimeout(function(){
+    document.addEventListener('click', function cerrar(e){
+      if(!wrap.contains(e.target)){
+        dd.classList.remove('open');
+        document.removeEventListener('click', cerrar);
+      }
+    });
+  }, 10);
+}
+
+function seleccionarProductoCot(rid, productoId){
+  var wrap = document.getElementById('cpsw-'+rid);
+  var dd   = document.getElementById('cpdd-'+rid);
+  if(!wrap) return;
+  var prod = db.inventario.find(function(p){ return p.id===productoId; });
+  if(!prod) return;
+  var input = wrap.querySelector('.ci-buscar');
+  var hidEl = wrap.querySelector('.ci-producto-id');
+  if(input) input.value = prod.nombre;
+  if(hidEl)  hidEl.value = productoId;
+  if(dd)    dd.classList.remove('open');
+
+  // Auto-fill precio según tipo de cliente
+  var clienteSel = document.getElementById('cot-cliente');
+  var clienteOpt = clienteSel ? clienteSel.options[clienteSel.selectedIndex] : null;
+  var tipo = clienteOpt ? (clienteOpt.dataset.tipo||'') : '';
+  var precio = prod.precioMenudeo || prod.precio || 0;
+  if(tipo==='Mayorista'||tipo==='Negocio (hotel/restaurante)') precio = prod.precioMayorista || precio;
+  else if(tipo==='Gobierno/Empresa') precio = prod.precioDistribuidor || precio;
+
+  var row = wrap.closest('div[id^="citem-"]');
+  if(row){
+    var precioInp = row.querySelector('.cot-precio');
+    if(precioInp && precio) precioInp.value = precio.toFixed(2);
+  }
   recalcCot();
 }
 
@@ -5472,27 +5555,25 @@ function recalcCot(){
 
 function getCotItems(){
   var items = [];
-  var sinPrecio = false;
   document.querySelectorAll('#cot-items-list > div').forEach(function(row){
-    var sel    = row.querySelector('select');
+    var hidEl  = row.querySelector('.ci-producto-id');
+    var buscar = row.querySelector('.ci-buscar');
     var cant   = parseFloat(row.querySelector('.cot-cant')?.value)||0;
     var precio = parseFloat(row.querySelector('.cot-precio')?.value)||0;
-    if(!sel || !sel.value) return; // fila vacía, ignorar
-    if(cant <= 0){ return; }       // sin cantidad, ignorar
-    if(precio <= 0){ sinPrecio = true; return; } // precio requerido
-    var opt = sel.options[sel.selectedIndex];
+    var productoId = hidEl ? hidEl.value : '';
+    if(!productoId) return;
+    if(cant <= 0) return;
+    if(precio <= 0) return;
+    var prod = db.inventario.find(function(i){ return i.id===productoId; });
     items.push({
-      productoId: sel.value,
-      nombre:     opt ? opt.text : '',
-      unidad:     opt ? (opt.dataset.unidad||'pza') : 'pza',
+      productoId: productoId,
+      nombre:     prod ? prod.nombre : (buscar ? buscar.value : ''),
+      unidad:     prod ? (prod.unidad||'pza') : 'pza',
       cantidad:   cant,
       precio:     precio,
       subtotal:   parseFloat((cant * precio).toFixed(2))
     });
   });
-  if(sinPrecio && !items.length){
-    showToast('⚠️ Agrega el precio a todos los productos','red');
-  }
   return items;
 }
 
@@ -5532,33 +5613,9 @@ function guardarCotizacion(estado){
     }
 
     // ── PASO 3: Leer ítems ──
-    var items = [];
-    var filasConError = 0;
-    document.querySelectorAll('#cot-items-list > div').forEach(function(row){
-      var sel    = row.querySelector('select');
-      var cantEl = row.querySelector('.cot-cant');
-      var preEl  = row.querySelector('.cot-precio');
-      if(!sel || !sel.value) return;
-      var cant   = parseFloat(cantEl ? cantEl.value : 0)||0;
-      var precio = parseFloat(preEl  ? preEl.value  : 0)||0;
-      if(cant <= 0 || precio <= 0){ filasConError++; return; }
-      var opt = sel.options[sel.selectedIndex];
-      items.push({
-        productoId: sel.value,
-        nombre:     opt ? opt.text : 'Producto',
-        unidad:     opt ? (opt.dataset.unidad||'pza') : 'pza',
-        cantidad:   cant,
-        precio:     precio,
-        subtotal:   parseFloat((cant*precio).toFixed(2))
-      });
-    });
-
+    var items = getCotItems();
     if(!items.length){
-      if(filasConError > 0){
-        showToast('⚠️ Completa la cantidad y el precio de cada producto','red',4000);
-      } else {
-        showToast('⚠️ Agrega al menos un producto a la cotización','red');
-      }
+      showToast('⚠️ Agrega al menos un producto con cantidad y precio','red',4000);
       return;
     }
 
@@ -5657,19 +5714,21 @@ function editarCotizacion(id){
       document.getElementById('cot-email-neg').value = cot.negocio.email||'';
       document.getElementById('cot-dir-neg').value   = cot.negocio.dir||'';
     }
-    // Rebuild items
+    // Rebuild items con buscador
     document.getElementById('cot-items-list').innerHTML='';
     cot.items.forEach(function(item){
       addCotItem();
       var rows = document.querySelectorAll('#cot-items-list > div');
       var row  = rows[rows.length-1];
       if(!row) return;
-      var sel  = row.querySelector('select');
-      for(var i=0;i<sel.options.length;i++){
-        if(sel.options[i].value===item.productoId){ sel.selectedIndex=i; break; }
-      }
-      row.querySelector('.cot-cant').value   = item.cantidad;
-      row.querySelector('.cot-precio').value = item.precio;
+      var hidEl  = row.querySelector('.ci-producto-id');
+      var buscar = row.querySelector('.ci-buscar');
+      if(hidEl)  hidEl.value  = item.productoId || '';
+      if(buscar) buscar.value = item.nombre || '';
+      var cantEl  = row.querySelector('.cot-cant');
+      var precioEl = row.querySelector('.cot-precio');
+      if(cantEl)   cantEl.value  = item.cantidad;
+      if(precioEl) precioEl.value = item.precio;
     });
     recalcCot();
   }, 100);
