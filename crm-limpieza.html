@@ -3841,10 +3841,32 @@ function renderClientes(){
       var ownerUsr = usuariosLista.find(function(u){ return u.id===c.propietarioId; });
       if(ownerUsr) ownerLabel = '<div style="font-size:10px;color:var(--accent);margin-top:2px">👤 '+ownerUsr.nombre+'</div>';
     }
-    return `<tr><td><div style="font-weight:700">${c.nombre}</div><div style="font-size:11px;color:var(--muted)">${c.dir||''}</div>${ownerLabel}</td><td class="mono">${c.tel}</td><td><span class="badge ${tc[c.tipo]||'badge-gray'}">${c.tipo}</span></td><td>${c.credito===0?'<span class="badge badge-green">Contado</span>':`<span class="badge badge-gold">${c.credito} días</span>`}</td><td class="mono" style="color:var(--green);font-weight:700">${fmt(c.totalCompras)}</td><td>${fmtDate(c.ultimoPedido)}</td><td><div class="action-btns"><button class="icon-btn del" onclick="del('clientes','${c.id}')">🗑</button></div></td></tr>`;
+    return `<tr><td><div style="font-weight:700">${c.nombre}</div><div style="font-size:11px;color:var(--muted)">${c.dir||''}</div>${ownerLabel}</td><td class="mono">${c.tel}</td><td><span class="badge ${tc[c.tipo]||'badge-gray'}">${c.tipo}</span></td><td>${c.credito===0?'<span class="badge badge-green">Contado</span>':`<span class="badge badge-gold">${c.credito} días</span>`}</td><td class="mono" style="color:var(--green);font-weight:700">${fmt(c.totalCompras)}</td><td>${fmtDate(c.ultimoPedido)}</td><td><div class="action-btns"><button class="icon-btn" onclick="editarCliente('${c.id}')" title="Editar" style="color:var(--accent)">✏️</button><button class="icon-btn del" onclick="del('clientes','${c.id}')">🗑</button></div></td></tr>`;
   }).join('');
 }
 
+
+
+// ── Editar cliente ──
+function editarCliente(id){
+  var c = db.clientes.find(function(x){ return x.id===id; });
+  if(!c) return;
+  openModal('modal-cliente');
+  setTimeout(function(){
+    document.querySelector('#modal-cliente .modal-header h3').textContent = '✏️ Editar Cliente';
+    document.getElementById('c-nombre').value  = c.nombre  || '';
+    document.getElementById('c-tel').value     = c.tel     || '';
+    var waEl = document.getElementById('c-wa');    if(waEl)    waEl.value    = c.wa      || '';
+    var conEl = document.getElementById('c-contacto'); if(conEl) conEl.value = c.contacto|| '';
+    var dirEl = document.getElementById('c-dir');  if(dirEl)   dirEl.value   = c.dir     || '';
+    document.getElementById('c-tipo').value    = c.tipo    || 'Minorista';
+    document.getElementById('c-credito').value = c.credito || 0;
+    var notEl = document.getElementById('c-notas'); if(notEl) notEl.value   = c.notas   || '';
+    // Guardar ID en campo oculto
+    var hidEl = document.getElementById('c-edit-id');
+    if(hidEl) hidEl.value = id;
+  }, 80);
+}
 
 // ── Surtir pedido pendiente (admin) ──
 function surtirPedido(ventaId){
