@@ -2624,23 +2624,30 @@ function getIngredientes(){
 
 // ── Precio según rol del usuario ──
 function getPrecioSegunRol(producto){
-  if(!_sesionActual) return producto.precioMenudeo || producto.precio || 0;
-  var rol = _sesionActual.rol;
-  var prov = (producto.proveedor||'').toLowerCase();
-  if(rol === 'distribuidor'){
-    // Productos Ginez y Proliver → precio mayorista (precio medio)
-    // Productos propios (sin proveedor externo o fabricación propia) → precio distribuidor
-    var esExterno = prov==='ginez' || prov==='proliver';
-    if(esExterno){
-      return producto.precioMayorista || producto.precio || 0;
-    } else {
-      return producto.precioDistribuidor || producto.precioMayorista || producto.precio || 0;
-    }
+  // Usar tipo de cliente seleccionado si hay uno
+  var tipoCliente = _getTipoClienteSeleccionado();
+  return getPrecioSegunTipoCliente(producto, tipoCliente);
+}
+
+// Obtener tipo del cliente seleccionado en el modal de venta
+function _getTipoClienteSeleccionado(){
+  var sel = document.getElementById('v-cliente');
+  var opt = sel ? sel.options[sel.selectedIndex] : null;
+  return opt ? (opt.dataset.tipo || '') : '';
+}
+
+// Precio según tipo de cliente — regla central de precios
+function getPrecioSegunTipoCliente(producto, tipoCliente){
+  var tipo = (tipoCliente||'').toLowerCase();
+  // Distribuidor → precio distribuidor
+  if(tipo.includes('distribuidor') || tipo.includes('gobierno') || tipo.includes('empresa')){
+    return producto.precioDistribuidor || producto.precioMayorista || producto.precio || 0;
   }
-  if(rol === 'vendedor'){
-    return producto.precioMenudeo || producto.precio || 0;
+  // Mayorista / Negocio → precio mayorista
+  if(tipo.includes('mayorista') || tipo.includes('negocio') || tipo.includes('hotel') || tipo.includes('restaurante')){
+    return producto.precioMayorista || producto.precio || 0;
   }
-  // Admin ve precio menudeo por defecto en ventas
+  // Minorista / Prospecto / Default → precio menudeo
   return producto.precioMenudeo || producto.precio || 0;
 }
 
@@ -3236,13 +3243,27 @@ function onVentaCanalChange(){
 function onVentaClienteChange(){
   var sel  = document.getElementById('v-cliente');
   var opt  = sel ? sel.options[sel.selectedIndex] : null;
-  var tipo = opt ? opt.dataset.tipo : '';
+  var tipo = opt ? (opt.dataset.tipo||'') : '';
+
+  // Sincronizar canal visual
   var canal = 'menudeo';
   if(tipo==='Mayorista'||tipo==='Negocio (hotel/restaurante)') canal='mayorista';
-  else if(tipo==='Gobierno/Empresa') canal='distribuidor';
+  else if(tipo==='Gobierno/Empresa'||tipo==='Distribuidor') canal='distribuidor';
   var canalSel = document.getElementById('v-canal');
   if(canalSel) canalSel.value = canal;
-  onVentaCanalChange();
+
+  // Actualizar precios de todos los items ya agregados según tipo de cliente
+  document.querySelectorAll('#v-items-list > div').forEach(function(row){
+    var pidEl = row.querySelector('.vi-producto-id');
+    var productoId = pidEl ? pidEl.value : '';
+    if(!productoId) return;
+    var prod = db.inventario.find(function(i){ return i.id===productoId; });
+    if(!prod) return;
+    var precio = getPrecioSegunTipoCliente(prod, tipo);
+    var precioInp = row.querySelector('.vi-precio');
+    if(precioInp && precio) precioInp.value = precio.toFixed(2);
+  });
+  recalcVenta();
 }
 
 function recalcVenta(){
@@ -3299,11 +3320,12 @@ function mostrarDropdownVenta(rid){
   }
 
   dd.innerHTML = lista.map(function(p){
-    var precio = (_sesionActual && (_sesionActual.rol==='distribuidor'||_sesionActual.rol==='vendedor'))
-               ? getPrecioSegunRol(p)
-               : (canal==='mayorista' ? (p.precioMayorista||p.precio||0)
-                  : canal==='distribuidor' ? (p.precioDistribuidor||p.precio||0)
-                  : (p.precioMenudeo||p.precio||0));
+    var tipoCliente = _getTipoClienteSeleccionado();
+    var precio = tipoCliente
+      ? getPrecioSegunTipoCliente(p, tipoCliente)
+      : (canal==='mayorista'    ? (p.precioMayorista||p.precio||0)
+         : canal==='distribuidor' ? (p.precioDistribuidor||p.precio||0)
+         : (p.precioMenudeo||p.precio||0));
     var stockColor = p.stock < 0 ? 'var(--red)' : p.stock === 0 ? 'var(--muted)' : 'var(--green)';
     return '<div class="prod-dropdown-item" onclick="seleccionarProductoVenta(\''+rid+'\',\''+p.id+'\')">'+
       '<div>'+
@@ -3338,12 +3360,13 @@ function seleccionarProductoVenta(rid, productoId){
   if(hidEl)  hidEl.value  = productoId;
   if(dd)     dd.classList.remove('open');
 
-  // Auto-fill precio según rol
-  var precio = getPrecioSegunRol(prod);
-  // Admin puede cambiar canal manualmente
-  if(_sesionActual && _sesionActual.rol==='admin'){
+  // Auto-fill precio según tipo de cliente seleccionado
+  var tipoCliente = _getTipoClienteSeleccionado();
+  var precio = getPrecioSegunTipoCliente(prod, tipoCliente);
+  // Si no hay cliente seleccionado, usar el canal manual
+  if(!tipoCliente){
     var canal = document.getElementById('v-canal')?.value || 'menudeo';
-    precio = canal==='mayorista' ? (prod.precioMayorista||prod.precio||0)
+    precio = canal==='mayorista'    ? (prod.precioMayorista||prod.precio||0)
            : canal==='distribuidor' ? (prod.precioDistribuidor||prod.precio||0)
            : (prod.precioMenudeo||prod.precio||0);
   }
