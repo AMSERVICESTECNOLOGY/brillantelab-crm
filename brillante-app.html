@@ -305,6 +305,7 @@ body{font-family:'Nunito Sans',sans-serif;background:var(--gris-fondo);color:var
     <button class="lbtn" id="lbtn" onclick="doLogin()">Entrar</button>
     <div class="ldiv"><span>¿Primera vez?</span></div>
     <button class="lreg" onclick="doRegister()">Crear cuenta nueva</button>
+    <div style="text-align:center;margin-top:14px"><span onclick="limpiarCacheYRecargar()" style="font-size:11.5px;color:#94a3b8;cursor:pointer;text-decoration:underline">¿Problemas para entrar? Limpiar caché</span></div>
   </div>
 </div>
 
@@ -742,8 +743,21 @@ body{font-family:'Nunito Sans',sans-serif;background:var(--gris-fondo);color:var
 // ══════════════════════════════════════════════════════
 const sb = supabase.createClient(
   'https://kipkffvzqyuatrcfduki.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcGtmZnZ6cXl1YXRyY2ZkdWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxODM2MjgsImV4cCI6MjA5MDc1OTYyOH0.SupBElOeW-i6DkwVWHpZnXYqAhpIzmBOIjb6qt5PZE8'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcGtmZnZ6cXl1YXRyY2ZkdWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxODM2MjgsImV4cCI6MjA5MDc1OTYyOH0.SupBElOeW-i6DkwVWHpZnXYqAhpIzmBOIjb6qt5PZE8',
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
 );
+
+// Verificar y refrescar sesión al cargar
+(async () => {
+  try {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (session) {
+      // Sesión válida — refrescar token silenciosamente
+      await sb.auth.refreshSession();
+    }
+    // Si no hay sesión, onAuthStateChange ya maneja mostrar el login
+  } catch(e) { console.warn('Session init:', e); }
+})();
 
 // ══════════════════════════════════════════════════════
 // ESTADO GLOBAL
@@ -849,6 +863,7 @@ async function doRegister(){
   error?showLMsg(error.message,'err'):showLMsg('✓ Cuenta creada. Revisa tu correo.','ok');
 }
 async function doLogout(){await sb.auth.signOut();}
+function limpiarCacheYRecargar(){try{sb.auth.signOut();}catch(e){}localStorage.clear();sessionStorage.clear();window.location.reload(true);}
 function showLMsg(t,c){const el=document.getElementById('lmsg');el.textContent=t;el.className='lmsg '+c;el.style.display='block';}
 
 // ══════════════════════════════════════════════════════
