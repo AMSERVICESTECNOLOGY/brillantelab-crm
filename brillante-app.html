@@ -843,6 +843,22 @@ sb.auth.onAuthStateChange(async (event, session) => {
 function limpiarCacheYRecargar(){try{sb.auth.signOut();}catch(e){}localStorage.clear();sessionStorage.clear();window.location.reload(true);}
 function showLMsg(t,c){const el=document.getElementById('lmsg');el.textContent=t;el.className='lmsg '+c;el.style.display='block';}
 
+async function doLogin(){
+  const e=val('l-email'),p=val('l-pass'),btn=document.getElementById('lbtn'),msg=document.getElementById('lmsg');
+  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
+  btn.disabled=true;btn.textContent='Entrando...';
+  const{error}=await sb.auth.signInWithPassword({email:e,password:p});
+  if(error){showLMsg('Correo o contraseña incorrectos','err');btn.disabled=false;btn.textContent='Entrar';}
+}
+async function doRegister(){
+  const e=val('l-email'),p=val('l-pass');
+  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
+  if(p.length<6){showLMsg('Mínimo 6 caracteres','err');return;}
+  const{error}=await sb.auth.signUp({email:e,password:p});
+  error?showLMsg(error.message,'err'):showLMsg('✓ Cuenta creada. Revisa tu correo.','ok');
+}
+async function doLogout(){await sb.auth.signOut();}
+
 // ══════════════════════════════════════════════════════
 // NAVEGACIÓN
 // ══════════════════════════════════════════════════════
