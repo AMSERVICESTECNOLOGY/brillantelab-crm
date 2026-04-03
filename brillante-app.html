@@ -998,6 +998,25 @@ async function crearUsuario(){
 // ══════════════════════════════════════════════════════
 // SUCURSAL
 // ══════════════════════════════════════════════════════
+async function cargarPerfil(){
+  if(!currentUser) return;
+  const{data}=await sb.from('perfiles').select('*').eq('id',currentUser.id).single();
+  if(data){
+    currentPerfil=data;
+    currentRol=data.rol||'vendedor';
+  } else {
+    const{count}=await sb.from('perfiles').select('*',{count:'exact',head:true});
+    currentRol=(count===0||count===null)?'admin':'vendedor';
+    await sb.from('perfiles').upsert({id:currentUser.id,email:currentUser.email,rol:currentRol});
+  }
+  const em=currentUser.email;
+  document.getElementById('user-av').textContent=em.substring(0,2).toUpperCase();
+  document.getElementById('user-name').textContent=em.split('@')[0];
+  const badge=document.getElementById('user-role-badge');
+  badge.textContent=currentRol.charAt(0).toUpperCase()+currentRol.slice(1);
+  badge.className='user-role-badge role-'+currentRol;
+}
+
 async function cargarSucursalActiva(){
   const{data}=await sb.from('sucursales').select('*').eq('activa',true).order('created_at').limit(1);
   if(data&&data.length>0){sucursalActiva=data[0];document.getElementById('suc-badge-top').textContent='🏪 '+data[0].nombre;}
