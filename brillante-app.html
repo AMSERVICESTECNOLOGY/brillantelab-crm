@@ -865,12 +865,13 @@ window.addEventListener('load', async () => {
   }
 });
 
-// Solo escuchar logout y login nuevo
+// Escuchar todos los eventos de auth
 sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('Auth event:', event);
+  console.log('Auth event:', event, !!session);
   if (event === 'SIGNED_OUT') {
     mostrarLogin();
-  } else if (event === 'SIGNED_IN' && !appIniciada) {
+  } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session) {
+    appIniciada = false; // resetear para permitir carga
     await mostrarApp(session);
   }
 });
