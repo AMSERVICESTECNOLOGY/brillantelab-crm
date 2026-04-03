@@ -777,9 +777,18 @@ const PERMISOS = {
 };
 
 // ══ AUTH ══
+async function queryConToken(tabla, query) {
+  // Si el cliente de supabase no tiene token, usar fetch directo
+  const token = localStorage.getItem('sb_access_token');
+  if(!token) return sb.from(tabla);
+  return sb.from(tabla).auth(token);
+}
+
 async function cargarPerfil(){
   if(!currentUser) return;
   try {
+    const token = localStorage.getItem('sb_access_token');
+    console.log('cargarPerfil - token:', token?.substring(0,15)||'NONE');
     // Usar maybeSingle() en lugar de single() para evitar error cuando no existe
     const{data, error}=await sb.from('perfiles').select('*').eq('id',currentUser.id).maybeSingle();
     console.log('cargarPerfil result:', data?.rol, error?.message);
@@ -810,32 +819,26 @@ async function cargarPerfil(){
 
 async function mostrarApp(session){
   try {
-    console.log('mostrarApp START');
+    console.log('mostrarApp START', session?.access_token?.substring(0,15));
     currentUser = session.user;
 
-    // Inyectar el token de sesión directamente en el cliente
-    // para que las consultas funcionen inmediatamente al recargar
-    await sb.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token
-    });
-    console.log('mostrarApp - session set');
+    // Guardar token en localStorage manualmente
+    if(session.access_token) {
+      localStorage.setItem('sb_access_token', session.access_token);
+      localStorage.setItem('sb_refresh_token', session.refresh_token);
+    }
 
     document.getElementById('splash').style.display='none';
     document.getElementById('login-screen').style.display='none';
     document.getElementById('sidebar').style.display='flex';
     document.getElementById('main-app').style.display='flex';
-    console.log('mostrarApp - UI shown');
 
     await cargarPerfil();
     console.log('mostrarApp - perfil OK, rol:', currentRol);
     await cargarSucursalActiva();
-    console.log('mostrarApp - sucursal OK');
     await cargarCategorias();
-    console.log('mostrarApp - categorias OK');
     aplicarPermisos();
     cargarDashboard();
-    console.log('mostrarApp - dashboard OK');
     if(currentRol==='admin') verificarSolicitudesPendientes();
   } catch(err) {
     console.error('mostrarApp ERROR:', err.message, err);
