@@ -580,7 +580,7 @@ async function cargarPerfil(session){
     const{data}=await api('perfiles',{eq:{id:CU.id}});
     const p=data?.[0];
     if(p){CP=p;ROL=p.rol||'vendedor';}
-    else{ROL='admin';await api('perfiles',{upsert:{id:CU.id,email:CU.email,rol:'admin',nombre:CU.email.split('@')[0]}});}
+    else{ROL='admin';await api('perfiles',{upsert:{id:CU.id,email:CU.email,rol:'admin',nombre:CU.email.split('@')[0],activo:true}});}
   }catch(e){ROL='admin';}
   const em=CU.email;
   g('uav').textContent=em.substring(0,2).toUpperCase();
@@ -739,7 +739,7 @@ async function guardarProducto(){
     const ini=parseInt(v('mp-si'))||0;
     if(ini>0&&SA.id&&data?.[0]){
       await api('inventario',{upsert:{producto_id:data[0].id,sucursal_id:SA.id,cantidad:ini}});
-      await api('movimientos_inventario',{insert:{producto_id:data[0].id,sucursal_id:SA.id,tipo:'entrada',cantidad:ini,notas:'Stock inicial'}});
+      await api('movimientos_inventario',{insert:{producto_id:data[0].id,sucursal_id:SA.id,tipo:'entrada',cantidad:ini,motivo:'Stock inicial'}});
     }
     toast('Producto guardado','ok');
   }
@@ -756,12 +756,12 @@ async function guardarAjuste(){
   const act=inv[pid]||0;
   const nuevo=ajTipo==='entrada'?act+cant:ajTipo==='salida'?Math.max(0,act-cant):cant;
   await api('inventario',{upsert:{producto_id:pid,sucursal_id:SA.id,cantidad:nuevo}});
-  await api('movimientos_inventario',{insert:{producto_id:pid,sucursal_id:SA.id,tipo:ajTipo,cantidad:cant,notas:v('aj-n')}});
+  await api('movimientos_inventario',{insert:{producto_id:pid,sucursal_id:SA.id,tipo:ajTipo,cantidad:cant,motivo:v('aj-n')}});
   toast('Stock actualizado','ok');closeM('m-ajuste');s('aj-c','');s('aj-n','');cargarInventario();cargarDashboard();
 }
 async function cargarMov(){
   const{data}=await api('movimientos_inventario',{select:'*,productos(nombre)',order:'creado_en.desc',limit:20});
-  g('l-mov').innerHTML=!data||data.length===0?'<div class="es"><div class="ei">↕️</div><div class="et">Sin movimientos</div></div>':'<table class="tbl"><thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Notas</th></tr></thead><tbody>'+data.map(m=>`<tr><td>${fd(m.creado_en)}</td><td>${m.productos?.nombre||'—'}</td><td>${bMov(m.tipo)}</td><td style="font-weight:700">${m.tipo==='salida'?'-':'+'}${m.cantidad}</td><td style="font-size:12px;color:var(--txt)">${m.notas||'—'}</td></tr>`).join('')+'</tbody></table>';
+  g('l-mov').innerHTML=!data||data.length===0?'<div class="es"><div class="ei">↕️</div><div class="et">Sin movimientos</div></div>':'<table class="tbl"><thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Motivo</th></tr></thead><tbody>'+data.map(m=>`<tr><td>${fd(m.creado_en)}</td><td>${m.productos?.nombre||'—'}</td><td>${bMov(m.tipo)}</td><td style="font-weight:700">${m.tipo==='salida'?'-':'+'}${m.cantidad}</td><td style="font-size:12px;color:var(--txt)">${m.motivo||'—'}</td></tr>`).join('')+'</tbody></table>';
 }
 function bMov(t){return{entrada:'<span class="badge b-vd">⬆ Entrada</span>',salida:'<span class="badge b-ro">⬇ Salida</span>',ajuste:'<span class="badge b-az">✎ Ajuste</span>',transferencia:'<span class="badge b-mo">↔ Transfer.</span>'}[t]||`<span class="badge b-gr">${t}</span>`;}
 
@@ -811,7 +811,7 @@ async function guardarVenta(){
   const cid=g('mv-cl').value;if(!cid){toast('Selecciona un cliente','err');return;}
   if(VI.length===0){toast('Agrega al menos un producto','err');return;}
   const total=VI.reduce((s,i)=>s+i.sub,0),folio='V-'+Date.now().toString().slice(-6);
-  const{data:vr,error}=await api('ventas',{insert:{folio,cliente_id:cid,estado:g('mv-es').value,total,notas:v('mv-no'),sucursal_id:SA.id}});
+  const{data:vr,error}=await api('ventas',{insert:{folio,cliente_id:cid,estado:g('mv-es').value,total,motivo:v('mv-no'),sucursal_id:SA.id}});
   if(error){toast('Error al registrar venta','err');return;}
   const vid=vr?.[0]?.id;
   if(vid){
@@ -819,7 +819,7 @@ async function guardarVenta(){
     for(const i of VI){
       const q=inv[i.pid]||0;
       await api('inventario',{upsert:{producto_id:i.pid,sucursal_id:SA.id,cantidad:Math.max(0,q-i.cant)}});
-      await api('movimientos_inventario',{insert:{producto_id:i.pid,sucursal_id:SA.id,tipo:'salida',cantidad:i.cant,referencia_id:vid,referencia_tipo:'venta',notas:'Venta '+folio}});
+      await api('movimientos_inventario',{insert:{producto_id:i.pid,sucursal_id:SA.id,tipo:'salida',cantidad:i.cant,referencia_id:vid,motivo:'Venta '+folio}});
     }
   }
   toast('Venta registrada: '+folio,'ok');closeM('m-venta');VI=[];s('mv-no','');cargarVentas();cargarDashboard();
@@ -840,7 +840,7 @@ async function recibirCompra(id){
   for(const item of(items||[])){
     const q=inv[item.producto_id]||0;
     await api('inventario',{upsert:{producto_id:item.producto_id,sucursal_id:SA.id,cantidad:q+item.cantidad}});
-    await api('movimientos_inventario',{insert:{producto_id:item.producto_id,sucursal_id:SA.id,tipo:'entrada',cantidad:item.cantidad,referencia_id:id,referencia_tipo:'compra',notas:'Recepción'}});
+    await api('movimientos_inventario',{insert:{producto_id:item.producto_id,sucursal_id:SA.id,tipo:'entrada',cantidad:item.cantidad,referencia_id:id,motivo:'Recepción'}});
   }
   await api('compras',{update:{estado:'recibida'},match:{id:'eq.'+id}});
   toast('Compra recibida — stock actualizado','ok');cargarCompras();cargarInventario();
@@ -880,7 +880,7 @@ async function guardarCompra(){
       for(const i of CI){
         const q=inv[i.pid]||0;
         await api('inventario',{upsert:{producto_id:i.pid,sucursal_id:SA.id,cantidad:q+i.cant}});
-        await api('movimientos_inventario',{insert:{producto_id:i.pid,sucursal_id:SA.id,tipo:'entrada',cantidad:i.cant,referencia_id:cid,referencia_tipo:'compra',notas:'Compra '+folio}});
+        await api('movimientos_inventario',{insert:{producto_id:i.pid,sucursal_id:SA.id,tipo:'entrada',cantidad:i.cant,referencia_id:cid,motivo:'Compra '+folio}});
       }
     }
   }
