@@ -804,12 +804,8 @@ function aplicarPermisos(){
 // ══════════════════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════════════════
-// ── ARRANQUE DE APP ──
-let appIniciada = false;
-
+// ── AUTH BOOT ──
 async function mostrarApp(session) {
-  if (appIniciada) return;
-  appIniciada = true;
   currentUser = session.user;
   document.getElementById('splash').style.display = 'none';
   document.getElementById('login-screen').style.display = 'none';
@@ -824,7 +820,6 @@ async function mostrarApp(session) {
 }
 
 function mostrarLogin() {
-  appIniciada = false;
   currentUser = null; currentPerfil = null; currentRol = 'vendedor';
   document.getElementById('splash').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
@@ -832,86 +827,19 @@ function mostrarLogin() {
   document.getElementById('main-app').style.display = 'none';
 }
 
-// ARRANQUE PRINCIPAL
+// Mostrar splash al arrancar
 document.getElementById('splash').style.display = 'flex';
 
-// Esperar a que el DOM y Supabase estén 100% listos
-window.addEventListener('load', async () => {
-  try {
-    // Pequeña pausa para que Supabase inicialice su estado interno
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const { data, error } = await sb.auth.getSession();
-    console.log('getSession result:', data?.session ? 'SESSION OK' : 'NO SESSION', error);
-
-    if (data?.session) {
-      await mostrarApp(data.session);
-    } else {
-      // Intentar recuperar sesión con refresh token
-      try {
-        const { data: rd } = await sb.auth.refreshSession();
-        if (rd?.session) {
-          await mostrarApp(rd.session);
-        } else {
-          mostrarLogin();
-        }
-      } catch(e2) {
-        mostrarLogin();
-      }
-    }
-  } catch(e) {
-    console.error('Boot error:', e);
-    mostrarLogin();
-  }
-});
-
-// Escuchar todos los eventos de auth
+// Un solo listener — maneja todo
 sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('Auth event:', event, !!session);
-  if (event === 'SIGNED_OUT') {
-    mostrarLogin();
-  } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session) {
-    appIniciada = false; // resetear para permitir carga
+  console.log('>> Auth:', event, session?.user?.email || 'none');
+  if (session) {
     await mostrarApp(session);
+  } else {
+    mostrarLogin();
   }
 });
 
-async function cargarPerfil(){
-  if(!currentUser) return;
-  const{data}=await sb.from('perfiles').select('*').eq('id',currentUser.id).single();
-  if(data){
-    currentPerfil=data;
-    currentRol=data.rol||'vendedor';
-  } else {
-    // Si no tiene perfil, revisar si es el primer usuario (admin)
-    const{count}=await sb.from('perfiles').select('*',{count:'exact',head:true});
-    currentRol = (count===0||count===null) ? 'admin' : 'vendedor';
-    // Crear perfil
-    await sb.from('perfiles').upsert({id:currentUser.id,email:currentUser.email,rol:currentRol});
-  }
-  const em=currentUser.email;
-  document.getElementById('user-av').textContent=em.substring(0,2).toUpperCase();
-  document.getElementById('user-name').textContent=em.split('@')[0];
-  const badge=document.getElementById('user-role-badge');
-  badge.textContent=currentRol.charAt(0).toUpperCase()+currentRol.slice(1);
-  badge.className='user-role-badge role-'+currentRol;
-}
-
-async function doLogin(){
-  const e=val('l-email'),p=val('l-pass'),btn=document.getElementById('lbtn'),msg=document.getElementById('lmsg');
-  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
-  btn.disabled=true;btn.textContent='Entrando...';
-  const{error}=await sb.auth.signInWithPassword({email:e,password:p});
-  if(error){showLMsg('Correo o contraseña incorrectos','err');btn.disabled=false;btn.textContent='Entrar';}
-}
-async function doRegister(){
-  const e=val('l-email'),p=val('l-pass');
-  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
-  if(p.length<6){showLMsg('Mínimo 6 caracteres','err');return;}
-  const{error}=await sb.auth.signUp({email:e,password:p});
-  error?showLMsg(error.message,'err'):showLMsg('✓ Cuenta creada. Revisa tu correo.','ok');
-}
-async function doLogout(){await sb.auth.signOut();}
 function limpiarCacheYRecargar(){try{sb.auth.signOut();}catch(e){}localStorage.clear();sessionStorage.clear();window.location.reload(true);}
 function showLMsg(t,c){const el=document.getElementById('lmsg');el.textContent=t;el.className='lmsg '+c;el.style.display='block';}
 
