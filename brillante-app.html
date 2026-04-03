@@ -812,11 +812,21 @@ async function mostrarApp(session){
   try {
     console.log('mostrarApp START');
     currentUser = session.user;
+
+    // Inyectar el token de sesión directamente en el cliente
+    // para que las consultas funcionen inmediatamente al recargar
+    await sb.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token
+    });
+    console.log('mostrarApp - session set');
+
     document.getElementById('splash').style.display='none';
     document.getElementById('login-screen').style.display='none';
     document.getElementById('sidebar').style.display='flex';
     document.getElementById('main-app').style.display='flex';
     console.log('mostrarApp - UI shown');
+
     await cargarPerfil();
     console.log('mostrarApp - perfil OK, rol:', currentRol);
     await cargarSucursalActiva();
@@ -824,12 +834,11 @@ async function mostrarApp(session){
     await cargarCategorias();
     console.log('mostrarApp - categorias OK');
     aplicarPermisos();
-    console.log('mostrarApp - permisos OK');
     cargarDashboard();
-    console.log('mostrarApp - dashboard iniciado');
+    console.log('mostrarApp - dashboard OK');
     if(currentRol==='admin') verificarSolicitudesPendientes();
   } catch(err) {
-    console.error('mostrarApp ERROR:', err);
+    console.error('mostrarApp ERROR:', err.message, err);
   }
 }
 
