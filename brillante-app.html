@@ -292,6 +292,15 @@ body{font-family:'Nunito Sans',sans-serif;background:var(--gris-fondo);color:var
 <body>
 <div id="toast"></div>
 
+<!-- SPLASH CARGA -->
+<div id="splash" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:linear-gradient(135deg,#1e2d8f 0%,#2e45c4 60%,#1a5fa8 100%);z-index:2000;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+  <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:36px;color:#fff">Brillante<span style="color:#c8e000">✦</span></div>
+  <div style="display:flex;align-items:center;gap:10px;color:rgba(255,255,255,0.7);font-size:14px">
+    <div style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></div>
+    Cargando sistema...
+  </div>
+</div>
+
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
@@ -744,20 +753,8 @@ body{font-family:'Nunito Sans',sans-serif;background:var(--gris-fondo);color:var
 const sb = supabase.createClient(
   'https://kipkffvzqyuatrcfduki.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcGtmZnZ6cXl1YXRyY2ZkdWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxODM2MjgsImV4cCI6MjA5MDc1OTYyOH0.SupBElOeW-i6DkwVWHpZnXYqAhpIzmBOIjb6qt5PZE8',
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'brillante-auth-v4' } }
 );
-
-// Verificar y refrescar sesión al cargar
-(async () => {
-  try {
-    const { data: { session }, error } = await sb.auth.getSession();
-    if (session) {
-      // Sesión válida — refrescar token silenciosamente
-      await sb.auth.refreshSession();
-    }
-    // Si no hay sesión, onAuthStateChange ya maneja mostrar el login
-  } catch(e) { console.warn('Session init:', e); }
-})();
 
 // ══════════════════════════════════════════════════════
 // ESTADO GLOBAL
@@ -807,23 +804,49 @@ function aplicarPermisos(){
 // ══════════════════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════════════════
-sb.auth.onAuthStateChange(async(_,session)=>{
-  if(session){
-    currentUser = session.user;
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('sidebar').style.display='flex';
-    document.getElementById('main-app').style.display='flex';
-    await cargarPerfil();
-    await cargarSucursalActiva();
-    await cargarCategorias();
-    aplicarPermisos();
-    cargarDashboard();
-    if(currentRol==='admin') verificarSolicitudesPendientes();
-  } else {
-    currentUser=null; currentPerfil=null; currentRol='vendedor';
-    document.getElementById('login-screen').style.display='flex';
-    document.getElementById('sidebar').style.display='none';
-    document.getElementById('main-app').style.display='none';
+// Flag para no inicializar dos veces
+let appIniciada = false;
+
+async function iniciarApp(session) {
+  if (!session) {
+    appIniciada = false;
+    currentUser = null; currentPerfil = null; currentRol = 'vendedor';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('sidebar').style.display = 'none';
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('splash').style.display = 'none';
+    return;
+  }
+  if (appIniciada) return; // Evitar doble inicialización
+  appIniciada = true;
+  currentUser = session.user;
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('sidebar').style.display = 'flex';
+  document.getElementById('main-app').style.display = 'flex';
+  await cargarPerfil();
+  await cargarSucursalActiva();
+  await cargarCategorias();
+  aplicarPermisos();
+  cargarDashboard();
+  if (currentRol === 'admin') verificarSolicitudesPendientes();
+}
+
+// Arranque: primero getSession, luego escuchar cambios
+(async () => {
+  document.getElementById('splash').style.display = 'flex';
+  const { data: { session } } = await sb.auth.getSession();
+  await iniciarApp(session);
+})();
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_OUT') {
+    appIniciada = false;
+    await iniciarApp(null);
+  } else if (event === 'SIGNED_IN' && !appIniciada) {
+    await iniciarApp(session);
+  } else if (event === 'TOKEN_REFRESHED' && session && !appIniciada) {
+    await iniciarApp(session);
   }
 });
 
