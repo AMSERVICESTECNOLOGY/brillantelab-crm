@@ -797,17 +797,28 @@ async function cargarPerfil(){
 }
 
 async function mostrarApp(session){
-  currentUser = session.user;
-  document.getElementById('splash').style.display='none';
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('sidebar').style.display='flex';
-  document.getElementById('main-app').style.display='flex';
-  await cargarPerfil();
-  await cargarSucursalActiva();
-  await cargarCategorias();
-  aplicarPermisos();
-  cargarDashboard();
-  if(currentRol==='admin') verificarSolicitudesPendientes();
+  try {
+    console.log('mostrarApp START');
+    currentUser = session.user;
+    document.getElementById('splash').style.display='none';
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('sidebar').style.display='flex';
+    document.getElementById('main-app').style.display='flex';
+    console.log('mostrarApp - UI shown');
+    await cargarPerfil();
+    console.log('mostrarApp - perfil OK, rol:', currentRol);
+    await cargarSucursalActiva();
+    console.log('mostrarApp - sucursal OK');
+    await cargarCategorias();
+    console.log('mostrarApp - categorias OK');
+    aplicarPermisos();
+    console.log('mostrarApp - permisos OK');
+    cargarDashboard();
+    console.log('mostrarApp - dashboard iniciado');
+    if(currentRol==='admin') verificarSolicitudesPendientes();
+  } catch(err) {
+    console.error('mostrarApp ERROR:', err);
+  }
 }
 
 function mostrarLogin(){
