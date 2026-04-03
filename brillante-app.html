@@ -832,21 +832,30 @@ function mostrarLogin() {
   document.getElementById('main-app').style.display = 'none';
 }
 
-// ARRANQUE PRINCIPAL — getSession directo, sin depender de eventos
+// ARRANQUE PRINCIPAL
 document.getElementById('splash').style.display = 'flex';
 
-(async () => {
+// Esperar a que el DOM y Supabase estén 100% listos
+window.addEventListener('load', async () => {
   try {
-    // Leer sesión directamente del localStorage
+    // Pequeña pausa para que Supabase inicialice su estado interno
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const { data, error } = await sb.auth.getSession();
+    console.log('getSession result:', data?.session ? 'SESSION OK' : 'NO SESSION', error);
+
     if (data?.session) {
       await mostrarApp(data.session);
     } else {
-      // Sin sesión — intentar refrescar con el token guardado
-      const { data: refreshData } = await sb.auth.refreshSession();
-      if (refreshData?.session) {
-        await mostrarApp(refreshData.session);
-      } else {
+      // Intentar recuperar sesión con refresh token
+      try {
+        const { data: rd } = await sb.auth.refreshSession();
+        if (rd?.session) {
+          await mostrarApp(rd.session);
+        } else {
+          mostrarLogin();
+        }
+      } catch(e2) {
         mostrarLogin();
       }
     }
@@ -854,10 +863,11 @@ document.getElementById('splash').style.display = 'flex';
     console.error('Boot error:', e);
     mostrarLogin();
   }
-})();
+});
 
-// Escuchar solo logout y nuevos logins
+// Solo escuchar logout y login nuevo
 sb.auth.onAuthStateChange(async (event, session) => {
+  console.log('Auth event:', event);
   if (event === 'SIGNED_OUT') {
     mostrarLogin();
   } else if (event === 'SIGNED_IN' && !appIniciada) {
