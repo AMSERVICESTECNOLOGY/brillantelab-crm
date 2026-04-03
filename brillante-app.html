@@ -747,40 +747,28 @@ body{font-family:'Nunito Sans',sans-serif;background:var(--gris-fondo);color:var
 </div>
 
 <script>
-// ══════════════════════════════════════════════════════
-// SUPABASE
-// ══════════════════════════════════════════════════════
+// ══ SUPABASE ══
 const sb = supabase.createClient(
   'https://kipkffvzqyuatrcfduki.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcGtmZnZ6cXl1YXRyY2ZkdWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxODM2MjgsImV4cCI6MjA5MDc1OTYyOH0.SupBElOeW-i6DkwVWHpZnXYqAhpIzmBOIjb6qt5PZE8',
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } }
+  { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
-// ══════════════════════════════════════════════════════
-// ESTADO GLOBAL
-// ══════════════════════════════════════════════════════
-let currentUser = null;       // auth user
-let currentPerfil = null;     // perfil con rol
-let currentRol = 'admin';     // rol activo
+// ══ ESTADO GLOBAL ══
+let currentUser = null;
+let currentPerfil = null;
+let currentRol = 'admin';
 let sucursalActiva = {id:null, nombre:'Principal'};
 let catCache = [];
 let prodData = [], invData = {}, ventasData = [], comprasData = [], clientesData = [], provsData = [];
 let ventaItems = [], compraItems = [];
 let filtroVentas = 'todos', filtroInv = 'todos', filtroClientes = 'todos';
 let currentView = 'dashboard';
-// Para solicitud pendiente de enviar
-let pendingSolicitudFn = null;
-let pendingSolicitudTabla = '';
-let pendingSolicitudRegistroId = '';
-let pendingSolicitudDatos = {};
+let pendingSolicitudFn = null, pendingSolicitudTabla = '', pendingSolicitudRegistroId = '', pendingSolicitudDatos = {};
 let ajusteTipo = 'entrada';
+const ADMIN_EMAIL = '';
 
-// ADMIN EMAIL — cambia por el tuyo
-const ADMIN_EMAIL = 'axel@brillante.com'; // ← aquí va tu correo real
-
-// ══════════════════════════════════════════════════════
-// PERMISOS POR ROL
-// ══════════════════════════════════════════════════════
+// ══ PERMISOS ══
 const PERMISOS = {
   admin:    {modulos:['dashboard','ventas','compras','inventario','clientes','proveedores','finanzas','sucursales','usuarios','reportes'], puedeEditar:true, puedeEliminar:true},
   vendedor: {modulos:['dashboard','ventas','clientes'], puedeEditar:false, puedeEliminar:false},
@@ -788,216 +776,7 @@ const PERMISOS = {
   contador: {modulos:['dashboard','finanzas','reportes'], puedeEditar:false, puedeEliminar:false},
 };
 
-function tieneAcceso(modulo){ return PERMISOS[currentRol]?.modulos.includes(modulo); }
-function puedeEditar(){ return PERMISOS[currentRol]?.puedeEditar; }
-
-function aplicarPermisos(){
-  const mods = ['ventas','compras','inventario','clientes','proveedores','finanzas','sucursales','usuarios','reportes'];
-  mods.forEach(m=>{
-    const nav = document.getElementById('nav-'+m);
-    if(nav) nav.style.display = tieneAcceso(m)?'':'none';
-  });
-  // Ocultar sección admin si no es admin
-  document.getElementById('sb-sec-admin').style.display = currentRol==='admin'?'':'none';
-}
-
-// ══════════════════════════════════════════════════════
-// AUTH
-// ══════════════════════════════════════════════════════
-// ── AUTH BOOT ──
-async function mostrarApp(session) {
-  currentUser = session.user;
-  document.getElementById('splash').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('sidebar').style.display = 'flex';
-  document.getElementById('main-app').style.display = 'flex';
-  await cargarPerfil();
-  await cargarSucursalActiva();
-  await cargarCategorias();
-  aplicarPermisos();
-  cargarDashboard();
-  if (currentRol === 'admin') verificarSolicitudesPendientes();
-}
-
-function mostrarLogin() {
-  currentUser = null; currentPerfil = null; currentRol = 'vendedor';
-  document.getElementById('splash').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('sidebar').style.display = 'none';
-  document.getElementById('main-app').style.display = 'none';
-}
-
-// Mostrar splash al arrancar
-document.getElementById('splash').style.display = 'flex';
-
-// Un solo listener — maneja todo
-sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('>> Auth:', event, session?.user?.email || 'none');
-  if (session) {
-    await mostrarApp(session);
-  } else {
-    mostrarLogin();
-  }
-});
-
-function limpiarCacheYRecargar(){try{sb.auth.signOut();}catch(e){}localStorage.clear();sessionStorage.clear();window.location.reload(true);}
-function showLMsg(t,c){const el=document.getElementById('lmsg');el.textContent=t;el.className='lmsg '+c;el.style.display='block';}
-
-async function doLogin(){
-  const e=val('l-email'),p=val('l-pass'),btn=document.getElementById('lbtn'),msg=document.getElementById('lmsg');
-  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
-  btn.disabled=true;btn.textContent='Entrando...';
-  const{error}=await sb.auth.signInWithPassword({email:e,password:p});
-  if(error){showLMsg('Correo o contraseña incorrectos','err');btn.disabled=false;btn.textContent='Entrar';}
-}
-async function doRegister(){
-  const e=val('l-email'),p=val('l-pass');
-  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
-  if(p.length<6){showLMsg('Mínimo 6 caracteres','err');return;}
-  const{error}=await sb.auth.signUp({email:e,password:p});
-  error?showLMsg(error.message,'err'):showLMsg('✓ Cuenta creada. Revisa tu correo.','ok');
-}
-async function doLogout(){await sb.auth.signOut();}
-
-// ══════════════════════════════════════════════════════
-// NAVEGACIÓN
-// ══════════════════════════════════════════════════════
-const TITLES={dashboard:'Dashboard',ventas:'Ventas',compras:'Compras',inventario:'Inventario',clientes:'Clientes',proveedores:'Proveedores',finanzas:'Finanzas',sucursales:'Sucursales',usuarios:'Usuarios y Permisos',reportes:'Reportes'};
-const LOADERS={clientes:cargarClientes,inventario:cargarInventario,ventas:cargarVentas,compras:cargarCompras,proveedores:cargarProveedores,finanzas:cargarFinanzas,sucursales:cargarSucursales,usuarios:cargarUsuarios,reportes:()=>{}};
-
-function showView(name){
-  if(!tieneAcceso(name)){toast('No tienes acceso a este módulo','err');return;}
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  document.getElementById('view-'+name).classList.add('active');
-  document.getElementById('pageTitle').textContent=TITLES[name]||name;
-  document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')?.includes("'"+name+"'"))n.classList.add('active');});
-  document.getElementById('search-input').value='';
-  currentView=name;
-  if(LOADERS[name])LOADERS[name]();
-}
-
-// ══════════════════════════════════════════════════════
-// SISTEMA DE SOLICITUDES DE AUTORIZACIÓN
-// ══════════════════════════════════════════════════════
-function solicitarOEliminar(tabla, fn){
-  if(puedeEditar()){
-    fn(); // admin ejecuta directo
-  } else {
-    pendingSolicitudFn=fn;
-    pendingSolicitudTabla=tabla;
-    set('sol-motivo','');
-    openModal('modal-solicitud');
-  }
-}
-
-async function enviarSolicitud(){
-  const motivo=val('sol-motivo')||'Sin motivo especificado';
-  const{error}=await sb.from('solicitudes_auth').insert({
-    solicitante_id:currentUser.id,
-    solicitante_email:currentUser.email,
-    tipo:'eliminar',
-    tabla:pendingSolicitudTabla,
-    descripcion:`${currentUser.email} solicita eliminar en ${pendingSolicitudTabla}. Motivo: ${motivo}`,
-    datos_nuevos:{motivo},
-    estado:'pendiente'
-  });
-  if(error){toast('Error enviando solicitud','err');return;}
-  toast('Solicitud enviada al administrador','ok');
-  closeModal('modal-solicitud');
-  closeModal('modal-cliente');closeModal('modal-producto');closeModal('modal-proveedor');
-}
-
-async function verificarSolicitudesPendientes(){
-  const{count}=await sb.from('solicitudes_auth').select('*',{count:'exact',head:true}).eq('estado','pendiente');
-  if(count&&count>0){
-    document.getElementById('badge-sol').style.display='';
-    document.getElementById('badge-sol').textContent=count;
-    document.getElementById('notif-dot').style.display='';
-  }
-}
-
-async function cargarUsuarios(){
-  if(currentRol!=='admin'){toast('Solo el administrador puede ver esta sección','err');return;}
-  // Solicitudes
-  const{data:sols}=await sb.from('solicitudes_auth').select('*').order('created_at',{ascending:false}).limit(50);
-  const pendientes=(sols||[]).filter(s=>s.estado==='pendiente');
-  if(pendientes.length>0){
-    document.getElementById('num-sol-badge').style.display='';
-    document.getElementById('num-sol-badge').textContent=pendientes.length+' pendientes';
-  }
-  document.getElementById('lista-solicitudes').innerHTML=(sols||[]).length===0
-    ?'<div class="empty-st"><div class="empty-ico">✅</div><div class="empty-txt">Sin solicitudes pendientes</div></div>'
-    :(sols||[]).map(s=>`
-      <div class="sol-item">
-        <div class="sol-hd">
-          <div class="sol-titulo">${s.descripcion||'Solicitud de cambio'}</div>
-          <span class="badge ${s.estado==='pendiente'?'amarillo':s.estado==='aprobado'?'verde':'rojo'}">${s.estado}</span>
-        </div>
-        <div class="sol-meta">👤 ${s.solicitante_email} · ${timeAgo(s.created_at)} · Tabla: ${s.tabla||'—'}</div>
-        ${s.estado==='pendiente'?`<div class="sol-btns">
-          <button class="btn btn-success btn-sm" onclick="resolverSolicitud('${s.id}','aprobado')">✓ Aprobar</button>
-          <button class="btn btn-danger btn-sm" onclick="resolverSolicitud('${s.id}','rechazado')">✕ Rechazar</button>
-        </div>`:`<div style="font-size:12px;color:var(--gris-texto)">Resuelta</div>`}
-      </div>`).join('');
-
-  // Usuarios / perfiles
-  const{data:perfs}=await sb.from('perfiles').select('*').order('created_at',{ascending:false});
-  document.getElementById('lista-usuarios').innerHTML=!perfs||perfs.length===0
-    ?'<div class="empty-st"><div class="empty-ico">👤</div><div class="empty-txt">Sin usuarios registrados</div></div>'
-    :perfs.map(p=>`<div class="user-row">
-      <div class="user-row-av">${(p.email||'?').substring(0,2).toUpperCase()}</div>
-      <div class="user-row-info">
-        <div class="user-row-email">${p.email||'Sin correo'}</div>
-        <div class="user-row-meta">ID: ${p.id?.substring(0,8)}...</div>
-      </div>
-      <span class="user-role-badge role-${p.rol||'vendedor'}" style="margin-right:8px">${p.rol||'vendedor'}</span>
-      ${p.id!==currentUser?.id?`<select class="form-inp" style="width:140px;padding:5px 8px;font-size:12px" onchange="cambiarRol('${p.id}',this.value)">
-        <option value="admin" ${p.rol==='admin'?'selected':''}>Admin</option>
-        <option value="vendedor" ${p.rol==='vendedor'?'selected':''}>Vendedor</option>
-        <option value="almacen" ${p.rol==='almacen'?'selected':''}>Almacén</option>
-        <option value="contador" ${p.rol==='contador'?'selected':''}>Contador</option>
-      </select>`:'<span class="badge azul">Tú</span>'}
-    </div>`).join('');
-}
-
-async function resolverSolicitud(id, estado){
-  await sb.from('solicitudes_auth').update({estado}).eq('id',id);
-  toast(estado==='aprobado'?'Solicitud aprobada':'Solicitud rechazada', estado==='aprobado'?'ok':'err');
-  // Actualizar badges
-  document.getElementById('badge-sol').style.display='none';
-  document.getElementById('notif-dot').style.display='none';
-  cargarUsuarios();
-}
-
-async function cambiarRol(userId, nuevoRol){
-  const{error}=await sb.from('perfiles').update({rol:nuevoRol}).eq('id',userId);
-  if(error){toast('Error cambiando rol','err');return;}
-  toast('Rol actualizado a: '+nuevoRol,'ok');
-}
-
-async function crearUsuario(){
-  const email=val('nu-email'),pass=val('nu-pass'),rol=document.getElementById('nu-rol').value;
-  if(!email||!pass){toast('Completa todos los campos','err');return;}
-  // Crear en auth
-  const{data,error}=await sb.auth.admin?.createUser({email,password:pass,email_confirm:true}).catch(()=>({error:{message:'No disponible en client-side'}}));
-  // Alternativa: registrar el perfil directamente con signUp
-  const{data:signData,error:signError}=await sb.auth.signUp({email,password:pass});
-  if(signError){toast('Error: '+signError.message,'err');return;}
-  // Crear perfil con rol
-  if(signData?.user){
-    await sb.from('perfiles').upsert({id:signData.user.id,email,rol});
-    toast('Usuario creado: '+email+' como '+rol,'ok');
-  } else {
-    toast('Usuario registrado. Asigna el rol manualmente.','info');
-  }
-  closeModal('modal-nuevo-usuario');set('nu-email','');set('nu-pass','');
-  cargarUsuarios();
-}
-
-// ══════════════════════════════════════════════════════
-// SUCURSAL
-// ══════════════════════════════════════════════════════
+// ══ AUTH ══
 async function cargarPerfil(){
   if(!currentUser) return;
   const{data}=await sb.from('perfiles').select('*').eq('id',currentUser.id).single();
@@ -1017,6 +796,75 @@ async function cargarPerfil(){
   badge.className='user-role-badge role-'+currentRol;
 }
 
+async function mostrarApp(session){
+  currentUser = session.user;
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('sidebar').style.display='flex';
+  document.getElementById('main-app').style.display='flex';
+  await cargarPerfil();
+  await cargarSucursalActiva();
+  await cargarCategorias();
+  aplicarPermisos();
+  cargarDashboard();
+  if(currentRol==='admin') verificarSolicitudesPendientes();
+}
+
+function mostrarLogin(){
+  currentUser=null; currentPerfil=null; currentRol='vendedor';
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('sidebar').style.display='none';
+  document.getElementById('main-app').style.display='none';
+}
+
+// Splash al arrancar
+document.getElementById('splash').style.display='flex';
+
+// onAuthStateChange es el único punto de entrada — funciona en carga inicial y refresh
+sb.auth.onAuthStateChange(async(event, session)=>{
+  console.log('Auth:', event, session?.user?.email||'none');
+  if(session){
+    await mostrarApp(session);
+  } else {
+    mostrarLogin();
+  }
+});
+
+async function doLogin(){
+  const e=val('l-email'),p=val('l-pass'),btn=document.getElementById('lbtn');
+  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
+  btn.disabled=true; btn.textContent='Entrando...';
+  const{error}=await sb.auth.signInWithPassword({email:e,password:p});
+  if(error){showLMsg('Correo o contraseña incorrectos','err');btn.disabled=false;btn.textContent='Entrar';}
+}
+async function doRegister(){
+  const e=val('l-email'),p=val('l-pass');
+  if(!e||!p){showLMsg('Ingresa correo y contraseña','err');return;}
+  if(p.length<6){showLMsg('Mínimo 6 caracteres','err');return;}
+  const{error}=await sb.auth.signUp({email:e,password:p});
+  error?showLMsg(error.message,'err'):showLMsg('✓ Cuenta creada. Revisa tu correo.','ok');
+}
+async function doLogout(){await sb.auth.signOut();}
+function showLMsg(t,c){const el=document.getElementById('lmsg');el.textContent=t;el.className='lmsg '+c;el.style.display='block';}
+function limpiarCacheYRecargar(){try{sb.auth.signOut();}catch(e){}localStorage.clear();sessionStorage.clear();window.location.reload(true);}
+
+function tieneAcceso(modulo){ return PERMISOS[currentRol]?.modulos.includes(modulo); }
+function puedeEditar(){ return PERMISOS[currentRol]?.puedeEditar; }
+
+function aplicarPermisos(){
+  const mods = ['ventas','compras','inventario','clientes','proveedores','finanzas','sucursales','usuarios','reportes'];
+  mods.forEach(m=>{
+    const nav = document.getElementById('nav-'+m);
+    if(nav) nav.style.display = tieneAcceso(m)?'':'none';
+  });
+  // Ocultar sección admin si no es admin
+  document.getElementById('sb-sec-admin').style.display = currentRol==='admin'?'':'none';
+}
+
+// ══════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════
 async function cargarSucursalActiva(){
   const{data}=await sb.from('sucursales').select('*').eq('activa',true).order('created_at').limit(1);
   if(data&&data.length>0){sucursalActiva=data[0];document.getElementById('suc-badge-top').textContent='🏪 '+data[0].nombre;}
@@ -1523,6 +1371,7 @@ function descargarCSV(contenido,nombre){
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-ov').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
 </script>
 </body>
 </html>
