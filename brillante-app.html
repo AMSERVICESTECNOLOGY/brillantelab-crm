@@ -521,9 +521,12 @@ sb.auth.onAuthStateChange(async(event,session)=>{
 
 // ══ FETCH CON TOKEN ══
 async function api(tabla,opts={}){
-  // Obtener token fresco en cada llamada
-  const {data:{session}}=await sb.auth.getSession();
-  const token=session?.access_token||SKEY;
+  // Usar token guardado directamente — sin llamar a getSession() que puede colgar
+  let token=SKEY;
+  try{
+    const raw=localStorage.getItem('sb-kipkffvzqyuatrcfduki-auth-token');
+    if(raw){const parsed=JSON.parse(raw);token=parsed.access_token||SKEY;}
+  }catch(e){}
   const h={'apikey':SKEY,'Authorization':'Bearer '+token,'Content-Type':'application/json'};
   const base=SURL+'/rest/v1/'+tabla;
 
