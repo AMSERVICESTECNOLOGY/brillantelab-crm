@@ -824,6 +824,18 @@ const PERMISOS = {
 };
 
 // ══ AUTH ══
+async function verificarSolicitudesPendientes(){
+  try {
+    const{data}=await dbQuery('solicitudes_auth',{filters:{estado:'pendiente'}});
+    const count=(data||[]).length;
+    if(count>0){
+      const b=document.getElementById('badge-sol');
+      if(b){b.style.display='';b.textContent=count;}
+      const nd=document.getElementById('notif-dot');
+      if(nd)nd.style.display='';
+    }
+  } catch(e){console.warn('verificarSolicitudes:',e);}
+}
 async function queryConToken(tabla, query) {
   // Si el cliente de supabase no tiene token, usar fetch directo
   const token = localStorage.getItem('sb_access_token');
@@ -843,7 +855,8 @@ async function cargarPerfil(){
       // Sin perfil — crear como admin si es el primero
       const {data:todos} = await dbQuery('perfiles');
       currentRol=(!todos||todos.length===0)?'admin':'vendedor';
-      await dbQuery('perfiles', {upsert:{id:currentUser.id, email:currentUser.email, rol:currentRol}});
+      // Insertar perfil directamente con sb que tiene el token del usuario
+      await sb.from('perfiles').upsert({id:currentUser.id, email:currentUser.email, rol:currentRol}, {onConflict:'id'});
     }
   } catch(e) {
     console.error('cargarPerfil error:', e);
@@ -924,6 +937,48 @@ async function doLogout(){await sb.auth.signOut();}
 function showLMsg(t,c){const el=document.getElementById('lmsg');el.textContent=t;el.className='lmsg '+c;el.style.display='block';}
 function limpiarCacheYRecargar(){try{sb.auth.signOut();}catch(e){}localStorage.clear();sessionStorage.clear();window.location.reload(true);}
 
+async function cargarUsuarios(){
+  if(currentRol!=='admin') return;
+  const{data:sols}=await dbQuery('solicitudes_auth',{order:'created_at.desc',limit:50});
+  const pendientes=(sols||[]).filter(s=>s.estado==='pendiente');
+  const numBadge=document.getElementById('num-sol-badge');
+  if(numBadge&&pendientes.length>0){numBadge.style.display='';numBadge.textContent=pendientes.length+' pendientes';}
+  document.getElementById('lista-solicitudes').innerHTML=(sols||[]).length===0
+    ?'<div class="empty-st"><div class="empty-ico">✅</div><div class="empty-txt">Sin solicitudes pendientes</div></div>'
+    :(sols||[]).map(s=>`<div class="sol-item"><div class="sol-hd"><div class="sol-titulo">${s.descripcion||'Solicitud'}</div><span class="badge ${s.estado==='pendiente'?'amarillo':s.estado==='aprobado'?'verde':'rojo'}">${s.estado}</span></div><div class="sol-meta">👤 ${s.solicitante_email||'—'} · ${timeAgo(s.created_at)}</div>${s.estado==='pendiente'?`<div class="sol-btns"><button class="btn btn-success btn-sm" onclick="resolverSolicitud('${s.id}','aprobado')">✓ Aprobar</button><button class="btn btn-danger btn-sm" onclick="resolverSolicitud('${s.id}','rechazado')">✕ Rechazar</button></div>`:'<div style="font-size:12px;color:var(--gris-texto)">Resuelta</div>'}</div>`).join('');
+  const{data:perfs}=await dbQuery('perfiles');
+  document.getElementById('lista-usuarios').innerHTML=!perfs||perfs.length===0
+    ?'<div class="empty-st"><div class="empty-ico">👤</div><div class="empty-txt">Sin usuarios</div></div>'
+    :perfs.map(p=>`<div class="user-row"><div class="user-row-av">${(p.email||'?').substring(0,2).toUpperCase()}</div><div class="user-row-info"><div class="user-row-email">${p.email||'—'}</div></div><span class="user-role-badge role-${p.rol||'vendedor'}">${p.rol||'vendedor'}</span>${p.id!==currentUser?.id?`<select class="form-inp" style="width:130px;padding:5px 8px;font-size:12px;margin-left:8px" onchange="cambiarRol('${p.id}',this.value)"><option value="admin" ${p.rol==='admin'?'selected':''}>Admin</option><option value="vendedor" ${p.rol==='vendedor'?'selected':''}>Vendedor</option><option value="almacen" ${p.rol==='almacen'?'selected':''}>Almacén</option><option value="contador" ${p.rol==='contador'?'selected':''}>Contador</option></select>`:'<span class="badge azul" style="margin-left:8px">Tú</span>'}</div>`).join('');
+}
+
+async function resolverSolicitud(id,estado){
+  await sb.from('solicitudes_auth').update({estado}).eq('id',id);
+  toast(estado==='aprobado'?'Solicitud aprobada':'Solicitud rechazada',estado==='aprobado'?'ok':'err');
+  document.getElementById('badge-sol').style.display='none';
+  document.getElementById('notif-dot').style.display='none';
+  cargarUsuarios();
+}
+
+async function cambiarRol(userId,nuevoRol){
+  const{error}=await sb.from('perfiles').update({rol:nuevoRol}).eq('id',userId);
+  if(error){toast('Error cambiando rol','err');return;}
+  toast('Rol actualizado: '+nuevoRol,'ok');
+}
+
+async function crearUsuario(){
+  const email=val('nu-email'),pass=val('nu-pass'),rol=document.getElementById('nu-rol').value;
+  if(!email||!pass){toast('Completa todos los campos','err');return;}
+  const{data:signData,error:signError}=await sb.auth.signUp({email,password:pass});
+  if(signError){toast('Error: '+signError.message,'err');return;}
+  if(signData?.user){
+    await sb.from('perfiles').upsert({id:signData.user.id,email,rol},{onConflict:'id'});
+    toast('Usuario creado: '+email+' como '+rol,'ok');
+  }
+  closeModal('modal-nuevo-usuario');set('nu-email','');set('nu-pass','');
+  cargarUsuarios();
+}
+
 function tieneAcceso(modulo){ return PERMISOS[currentRol]?.modulos.includes(modulo); }
 function puedeEditar(){ return PERMISOS[currentRol]?.puedeEditar; }
 
@@ -941,7 +996,7 @@ function aplicarPermisos(){
 // AUTH
 // ══════════════════════════════════════════════════════
 async function cargarSucursalActiva(){
-  const{data}=await dbQuery('sucursales',{filters:{activa:'true'},order:'created_at',limit:1});
+  const{data}=await dbQuery('sucursales',{filters:{activa:'true'},limit:1});
   if(data&&data.length>0){sucursalActiva=data[0];document.getElementById('suc-badge-top').textContent='🏪 '+data[0].nombre;}
 }
 
