@@ -886,6 +886,14 @@ async function mostrarApp(session){
     document.getElementById('sidebar').style.display='flex';
     document.getElementById('main-app').style.display='flex';
 
+    // Forzar token en cliente sb para todas las consultas
+    if(session.access_token){
+      await sb.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
+      });
+    }
+
     await cargarPerfil();
     console.log('mostrarApp - perfil OK, rol:', currentRol);
     await cargarSucursalActiva();
@@ -1003,6 +1011,23 @@ async function cargarSucursalActiva(){
 // ══════════════════════════════════════════════════════
 // TOAST / HELPERS
 // ══════════════════════════════════════════════════════
+// ══ NAVEGACIÓN ══
+const TITLES={dashboard:'Dashboard',ventas:'Ventas',compras:'Compras',inventario:'Inventario',clientes:'Clientes',proveedores:'Proveedores',finanzas:'Finanzas',sucursales:'Sucursales',usuarios:'Usuarios y Permisos',reportes:'Reportes'};
+const LOADERS={clientes:()=>cargarClientes(),inventario:()=>cargarInventario(),ventas:()=>cargarVentas(),compras:()=>cargarCompras(),proveedores:()=>cargarProveedores(),finanzas:()=>cargarFinanzas(),sucursales:()=>cargarSucursales(),usuarios:()=>cargarUsuarios(),reportes:()=>{}};
+
+function showView(name){
+  if(!tieneAcceso(name)){toast('No tienes acceso a este módulo','err');return;}
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const el=document.getElementById('view-'+name);
+  if(el)el.classList.add('active');
+  document.getElementById('pageTitle').textContent=TITLES[name]||name;
+  document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')?.includes("'"+name+"'"))n.classList.add('active');});
+  document.getElementById('search-input').value='';
+  currentView=name;
+  if(LOADERS[name])LOADERS[name]();
+}
+
 function toast(msg,type='info'){
   const el=document.createElement('div');
   el.className='toast-i '+type;
