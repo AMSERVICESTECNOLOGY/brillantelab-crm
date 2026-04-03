@@ -779,21 +779,33 @@ const PERMISOS = {
 // ══ AUTH ══
 async function cargarPerfil(){
   if(!currentUser) return;
-  const{data}=await sb.from('perfiles').select('*').eq('id',currentUser.id).single();
-  if(data){
-    currentPerfil=data;
-    currentRol=data.rol||'vendedor';
-  } else {
-    const{count}=await sb.from('perfiles').select('*',{count:'exact',head:true});
-    currentRol=(count===0||count===null)?'admin':'vendedor';
-    await sb.from('perfiles').upsert({id:currentUser.id,email:currentUser.email,rol:currentRol});
+  try {
+    // Usar maybeSingle() en lugar de single() para evitar error cuando no existe
+    const{data, error}=await sb.from('perfiles').select('*').eq('id',currentUser.id).maybeSingle();
+    console.log('cargarPerfil result:', data?.rol, error?.message);
+    if(data){
+      currentPerfil=data;
+      currentRol=data.rol||'vendedor';
+    } else {
+      // No tiene perfil — crear uno
+      const{count}=await sb.from('perfiles').select('*',{count:'exact',head:true});
+      currentRol=(count===0||count===null)?'admin':'vendedor';
+      await sb.from('perfiles').upsert({id:currentUser.id,email:currentUser.email,rol:currentRol});
+    }
+  } catch(e) {
+    console.error('cargarPerfil error:', e);
+    currentRol='vendedor'; // fallback seguro
   }
-  const em=currentUser.email;
-  document.getElementById('user-av').textContent=em.substring(0,2).toUpperCase();
-  document.getElementById('user-name').textContent=em.split('@')[0];
-  const badge=document.getElementById('user-role-badge');
-  badge.textContent=currentRol.charAt(0).toUpperCase()+currentRol.slice(1);
-  badge.className='user-role-badge role-'+currentRol;
+  try {
+    const em=currentUser.email;
+    document.getElementById('user-av').textContent=em.substring(0,2).toUpperCase();
+    document.getElementById('user-name').textContent=em.split('@')[0];
+    const badge=document.getElementById('user-role-badge');
+    badge.textContent=currentRol.charAt(0).toUpperCase()+currentRol.slice(1);
+    badge.className='user-role-badge role-'+currentRol;
+  } catch(e) {
+    console.error('cargarPerfil UI error:', e);
+  }
 }
 
 async function mostrarApp(session){
