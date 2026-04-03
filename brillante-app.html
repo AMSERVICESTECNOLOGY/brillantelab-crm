@@ -748,11 +748,58 @@ body{font-family:'Nunito Sans',sans-serif;background:var(--gris-fondo);color:var
 
 <script>
 // ══ SUPABASE ══
-const sb = supabase.createClient(
-  'https://kipkffvzqyuatrcfduki.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcGtmZnZ6cXl1YXRyY2ZkdWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxODM2MjgsImV4cCI6MjA5MDc1OTYyOH0.SupBElOeW-i6DkwVWHpZnXYqAhpIzmBOIjb6qt5PZE8',
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
+const SUPA_URL = 'https://kipkffvzqyuatrcfduki.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpcGtmZnZ6cXl1YXRyY2ZkdWtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxODM2MjgsImV4cCI6MjA5MDc1OTYyOH0.SupBElOeW-i6DkwVWHpZnXYqAhpIzmBOIjb6qt5PZE8';
+
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
+
+// Query helper que siempre usa el token guardado
+async function dbQuery(tabla, {select='*', filters={}, order=null, limit=null, single=false, upsert=null, insert=null, update=null, updateFilter=null} = {}) {
+  const token = localStorage.getItem('sb_access_token') || SUPA_KEY;
+  const headers = {
+    'apikey': SUPA_KEY,
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json',
+    'Prefer': single ? 'return=representation' : 'return=representation'
+  };
+
+  let url = SUPA_URL + '/rest/v1/' + tabla;
+
+  if(insert) {
+    const r = await fetch(url, {method:'POST', headers:{...headers,'Prefer':'return=representation'}, body:JSON.stringify(insert)});
+    return r.ok ? {data: await r.json(), error:null} : {data:null, error:{message: await r.text()}};
+  }
+
+  if(upsert) {
+    const r = await fetch(url, {method:'POST', headers:{...headers,'Prefer':'resolution=merge-duplicates,return=representation'}, body:JSON.stringify(upsert)});
+    return r.ok ? {data: await r.json(), error:null} : {data:null, error:{message: await r.text()}};
+  }
+
+  if(update && updateFilter) {
+    const params = new URLSearchParams(updateFilter);
+    const r = await fetch(url + '?' + params, {method:'PATCH', headers:{...headers,'Prefer':'return=representation'}, body:JSON.stringify(update)});
+    return r.ok ? {data: await r.json(), error:null} : {data:null, error:{message: await r.text()}};
+  }
+
+  // SELECT
+  const params = new URLSearchParams();
+  params.set('select', select);
+  Object.entries(filters).forEach(([k,v]) => params.set(k, 'eq.' + v));
+  if(order) params.set('order', order);
+  if(limit) params.set('limit', limit);
+  if(single) headers['Accept'] = 'application/vnd.pgrst.object+json';
+
+  const r = await fetch(url + '?' + params, {headers});
+  if(!r.ok) {
+    const err = await r.text();
+    console.error('dbQuery error:', tabla, err);
+    return {data: single ? null : [], error: {message: err}};
+  }
+  const data = await r.json();
+  return {data: single ? (Array.isArray(data) ? data[0]||null : data) : data, error: null};
+}
 
 // ══ ESTADO GLOBAL ══
 let currentUser = null;
@@ -787,34 +834,27 @@ async function queryConToken(tabla, query) {
 async function cargarPerfil(){
   if(!currentUser) return;
   try {
-    const token = localStorage.getItem('sb_access_token');
-    console.log('cargarPerfil - token:', token?.substring(0,15)||'NONE');
-    // Usar maybeSingle() en lugar de single() para evitar error cuando no existe
-    const{data, error}=await sb.from('perfiles').select('*').eq('id',currentUser.id).maybeSingle();
-    console.log('cargarPerfil result:', data?.rol, error?.message);
+    const {data} = await dbQuery('perfiles', {filters:{id:currentUser.id}, single:true});
+    console.log('cargarPerfil result:', data?.rol);
     if(data){
       currentPerfil=data;
       currentRol=data.rol||'vendedor';
     } else {
-      // No tiene perfil — crear uno
-      const{count}=await sb.from('perfiles').select('*',{count:'exact',head:true});
-      currentRol=(count===0||count===null)?'admin':'vendedor';
-      await sb.from('perfiles').upsert({id:currentUser.id,email:currentUser.email,rol:currentRol});
+      // Sin perfil — crear como admin si es el primero
+      const {data:todos} = await dbQuery('perfiles');
+      currentRol=(!todos||todos.length===0)?'admin':'vendedor';
+      await dbQuery('perfiles', {upsert:{id:currentUser.id, email:currentUser.email, rol:currentRol}});
     }
   } catch(e) {
     console.error('cargarPerfil error:', e);
-    currentRol='vendedor'; // fallback seguro
+    currentRol='admin';
   }
-  try {
-    const em=currentUser.email;
-    document.getElementById('user-av').textContent=em.substring(0,2).toUpperCase();
-    document.getElementById('user-name').textContent=em.split('@')[0];
-    const badge=document.getElementById('user-role-badge');
-    badge.textContent=currentRol.charAt(0).toUpperCase()+currentRol.slice(1);
-    badge.className='user-role-badge role-'+currentRol;
-  } catch(e) {
-    console.error('cargarPerfil UI error:', e);
-  }
+  const em=currentUser.email;
+  document.getElementById('user-av').textContent=em.substring(0,2).toUpperCase();
+  document.getElementById('user-name').textContent=em.split('@')[0];
+  const badge=document.getElementById('user-role-badge');
+  badge.textContent=currentRol.charAt(0).toUpperCase()+currentRol.slice(1);
+  badge.className='user-role-badge role-'+currentRol;
 }
 
 async function mostrarApp(session){
@@ -901,7 +941,7 @@ function aplicarPermisos(){
 // AUTH
 // ══════════════════════════════════════════════════════
 async function cargarSucursalActiva(){
-  const{data}=await sb.from('sucursales').select('*').eq('activa',true).order('created_at').limit(1);
+  const{data}=await dbQuery('sucursales',{filters:{activa:'true'},order:'created_at',limit:1});
   if(data&&data.length>0){sucursalActiva=data[0];document.getElementById('suc-badge-top').textContent='🏪 '+data[0].nombre;}
 }
 
@@ -927,7 +967,7 @@ function badgeEstado(e){const m={pendiente:'<span class="badge amarillo">Pendien
 function tipoLabel(t){return{institucional:'🏢 Institucional',distribuidor:'📦 Distribuidor',publico:'👤 Público'}[t]||t;}
 
 async function cargarCategorias(){
-  const{data}=await sb.from('categorias').select('*').order('nombre');
+  const{data}=await dbQuery('categorias',{order:'nombre'});
   catCache=data||[];
   document.getElementById('mp-cat').innerHTML=catCache.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
